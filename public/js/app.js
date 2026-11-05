@@ -139,6 +139,8 @@ on('set',applySet);
 function syncJump(){jump.classList.toggle('show',!stick);$('#jumpT').textContent=unread?unread+' new message'+(unread>1?'s':''):'Jump to present'}
 scr.addEventListener('scroll',()=>{const s=scr.scrollHeight-scr.scrollTop-scr.clientHeight<48;if(s!==stick||(s&&unread)){stick=s;if(s)unread=0;syncJump()}},{passive:true});
 jump.onclick=()=>{stick=true;unread=0;scr.scrollTop=scr.scrollHeight;syncJump()};
+/* fonts, images and the pin/poll card change heights after a message lands: stay pinned to the bottom if we were */
+if(window.ResizeObserver){const ro=new ResizeObserver(()=>{if(stick)scr.scrollTop=scr.scrollHeight});ro.observe(feed);ro.observe(scr)}
 on('msg',m=>{if(SET.nobots&&m.bot)return;pend.push(m);if(!raf)raf=requestAnimationFrame(flush)});
 function flush(){
   raf=0;if(!pend.length)return;
