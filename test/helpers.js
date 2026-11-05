@@ -5,40 +5,62 @@ const path = require('path');
 const crypto = require('crypto');
 const { createApp } = require('../server/app');
 
-/** Start a server on a free port with a throwaway data file. */
+/**
+ * Start a server on a free port. Uses a throwaway JSON file, or MongoDB
+ * when TEST_MONGODB_URI is set (collections get a random prefix and are
+ * dropped afterwards).
+ */
 async function start(opts = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ater-test-'));
   const dataFile = path.join(dir, 'data.json');
-  const app = createApp({ dataFile, saveDelay: 5, ...opts });
+  const mongoPrefix = process.env.TEST_MONGODB_URI ? 'test_' + crypto.randomBytes(3).toString('hex') + '_' : '';
+  const base = { dataFile, saveDelay: 5, limits: { signups: 1000, auth: 1000 }, mongoUri: process.env.TEST_MONGODB_URI || '', mongoPrefix };
+  const app = await createApp({ ...base, ...opts });
   await new Promise((ok) => app.server.listen(0, '127.0.0.1', ok));
-  const base = `http://127.0.0.1:${app.server.address().port}`;
-  return {
-    app, base, dataFile,
-    async stop() { await app.close(); fs.rmSync(dir, { recursive: true, force: true }); },
+  const url = `http://127.0.0.1:${app.server.address().port}`;
+  const handle = {
+    app, base: url, dataFile, appOpts: { ...base, ...opts },
+    async stop() {
+      await handle.app.close().catch(() => {});
+      if (mongoPrefix) await dropPrefix(process.env.TEST_MONGODB_URI, mongoPrefix);
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
   };
+  return handle;
+}
+
+async function dropPrefix(uri, prefix) {
+  const { MongoClient } = require('mongodb');
+  const c = new MongoClient(uri);
+  await c.connect();
+  const db = c.db('ater');
+  for (const col of await db.listCollections().toArray()) if (col.name.startsWith(prefix)) await db.collection(col.name).drop();
+  await c.close();
 }
 
 /** A browser-ish client that keeps its own login cookie. */
-function client(base) {
+function client(base, { origin } = {}) {
   let cookie = '';
+  const password = crypto.randomUUID();
   async function call(p, body, { header = true } = {}) {
     const headers = { 'content-type': 'application/json' };
     if (header) headers['x-ater'] = '1';
+    if (origin) headers.origin = origin;
     if (cookie) headers.cookie = cookie;
     const r = await fetch(base + p, { method: body === undefined ? 'GET' : 'POST', headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const set = r.headers.get('set-cookie');
     if (set) cookie = set.split(';')[0].endsWith('=') ? '' : set.split(';')[0];
     let json = null;
     try { json = await r.json(); } catch { /* not json */ }
-    return { status: r.status, ...json };
+    return { status: r.status, headers: r.headers, ...json };
   }
-  const password = crypto.randomUUID();
   return {
-    call,
-    register: (name) => call('/api/auth/register', { name, password }),
+    call, password,
+    register: (name, pw = password) => call('/api/auth/register', { name, password: pw }),
     login: (name, pw = password) => call('/api/auth/login', { name, password: pw }),
     say: (text, rp) => call('/api/send', { text, rp }),
     get cookie() { return cookie; },
+    set cookie(v) { cookie = v; },
   };
 }
 
@@ -72,8 +94,7 @@ async function stream(base, cookie = '') {
   })();
   return {
     events,
-    /** Wait for the first event (already seen or future) that matches. */
-    next(ev, pred = () => true, ms = 2000) {
+    next(ev, pred = () => true, ms = 3000) {
       const test = (e) => e.ev === ev && pred(e.data);
       const seen = events.find(test);
       if (seen) return Promise.resolve(seen);
@@ -87,4 +108,6 @@ async function stream(base, cookie = '') {
   };
 }
 
-module.exports = { start, client, stream };
+const pause = (ms = 500) => new Promise((r) => setTimeout(r, ms));
+
+module.exports = { start, client, stream, pause };

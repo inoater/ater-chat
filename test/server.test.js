@@ -181,19 +181,23 @@ describe('website', () => {
   });
 });
 
-test('accounts and chat survive a restart', async () => {
+test('accounts, sessions and chat survive a restart', async () => {
   const s = await start();
   const c = client(s.base);
   await c.register('keeper');
   await c.say('remember me');
   await s.app.close();
-  const again = createApp({ dataFile: s.dataFile });
+  const again = await createApp(s.appOpts);
   await new Promise((ok) => again.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${again.server.address().port}`;
   const live = await stream(base);
   const hello = await live.next('hello');
   assert.ok(hello.data.history.some((m) => m.text === 'remember me'));
+  const back = client(base); back.cookie = c.cookie;
+  assert.equal((await back.call('/api/me')).me.name, 'keeper', 'still signed in');
   assert.equal((await client(base).login('keeper')).status, 401, 'a different password still fails');
+  assert.equal((await client(base).login('keeper', c.password)).status, 200);
   live.close();
-  await again.close();
+  s.app = again;
+  await s.stop();
 });
