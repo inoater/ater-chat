@@ -400,6 +400,7 @@ function aterStart(){
   if(ATER.es)ATER.es.close();
   status('at','wait','connecting…');
   const es=ATER.es=new EventSource(b+'/api/stream',{withCredentials:true});
+  if(!ATER.providers)aterApi('/api/me').then(r=>{ATER.providers=r.providers||[];emit('ater','providers')});
   const L=(ev,f)=>es.addEventListener(ev,e=>{let d;try{d=JSON.parse(e.data)}catch{return}f(d)});
   L('hello',d=>{
     ATER.up=true;ATER.me=d.me;ME=d.me&&d.me.name;mkAR();

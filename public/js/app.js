@@ -380,6 +380,7 @@ function userCard(p,name){
     if(pr.error||c.hidden)return;
     const line=h('div','uc-p');line.append('Joined '+new Date(pr.created).toLocaleDateString([],{year:'numeric',month:'short',day:'numeric'}),' · '+pr.msgs.toLocaleString()+' messages');
     if(pr.streak>1)line.append(' · '+pr.streak+'-day streak');if(pr.owner)line.append(' · Broadcaster');else if(pr.mod)line.append(' · Moderator');
+    for(const[p,n]of Object.entries(pr.verified||{})){const v=h('a','ver');v.href=p==='twitch'?'https://www.twitch.tv/'+n:'https://kick.com/'+n;v.target='_blank';v.rel='noopener';v.title='Linked and verified';v.append(icon(p==='twitch'?'i-tw':'i-kk','i'),n,' ✓');line.append(' ',v)}
     c.insertBefore(line,c.querySelector('.uc-s'));
   });
   const st=h('div','uc-s');
@@ -896,15 +897,24 @@ function openAuth(m){
 const AUTH_TEXT={
   login:['Sign in to Ater chat','Sign in','Password','current-password','Ater accounts live on this site only. They’re separate from Twitch, Kick and YouTube.'],
   register:['Join Ater chat','Create account','Password','new-password','Pick a name (3–20 letters, numbers or _) and a password. You’ll get recovery codes in case you ever forget it.'],
-  recover:['Reset your password','Reset password','New password','new-password','Use one of the recovery codes you saved when you made your account. Each code works once, and resetting signs out your other devices.']
+  recover:['Reset your password','Reset password','New password','new-password','Use one of the recovery codes you saved when you made your account. Each code works once, and resetting signs out your other devices.'],
+  finish:['Pick your Ater name','Create account','','off','This is the name people see in Ater chat. You can sign in with the same account next time, no password needed.']
 };
+const PROV={google:['Google','i-google'],twitch:['Twitch','i-tw'],kick:['Kick','i-kk']};
+let oauthT='';
 function setAuthMode(m){
   authMode=m;const t=AUTH_TEXT[m];
   $$('#authSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
   $('#authT').textContent=t[0];$('#authB').textContent=t[1];$('#authPL').textContent=t[2];$('#authP').autocomplete=t[3];$('#authH').textContent=t[4];
   $('#authCodeL').hidden=m!=='recover';$('#authC').required=m==='recover';
   $('#authForgot').textContent=m==='recover'?'Back to sign in':'Forgot your password?';$('#authForgot').hidden=m==='register';
-  $('#authMeter').hidden=m==='login';meter();
+  $('#authMeter').hidden=m==='login'||m==='finish';meter();
+  /* provider buttons: sign in / create account only */
+  const pv=$('#authProv'),list=ATER.providers||[],show=list.length&&(m==='login'||m==='register');
+  pv.hidden=$('#authOr').hidden=!show;$('#authSeg').hidden=m==='finish';
+  if(show)pv.replaceChildren(...list.map(p=>{const a=h('a','btn btn-o oa '+p.id);a.href='/api/auth/oauth/'+p.id+'/start';a.append(icon((PROV[p.id]||[])[1]||'i-chat','i'),'Continue with '+p.name);return a}));
+  /* finish: just the name */
+  $('#authP').closest('label').hidden=m==='finish';$('#authP').required=m!=='finish';
 }
 /* rough strength meter: length and variety, minus obvious patterns (the server has the final say) */
 function pwScore(pw,name){
@@ -926,14 +936,15 @@ $('#authX').onclick=()=>authM.hidden=true;authM.onclick=e=>{if(e.target===authM)
 $('#authF').onsubmit=async e=>{
   e.preventDefault();const b=$('#authB');b.disabled=true;$('#authE').textContent='';
   const name=$('#authN').value.trim(),password=$('#authP').value;
-  const r=authMode==='login'?await aterApi('/api/auth/login',{name,password})
+  const r=authMode==='finish'?await aterApi('/api/auth/oauth/finish',{t:oauthT,name})
+    :authMode==='login'?await aterApi('/api/auth/login',{name,password})
     :authMode==='register'?await aterApi('/api/auth/register',{name,password,website:$('#authW').value})
     :await aterApi('/api/auth/recover',{name,code:$('#authC').value,password});
   b.disabled=false;
   if(r.error){$('#authE').textContent=r.error;return}
   $('#authP').value='';$('#authC').value='';authM.hidden=true;
   ATER.me=r.me;ME=r.me.name;mkAR();syncAuth();aterStart();
-  if(authMode==='register'&&r.codes)showCodes(r.codes,()=>toast('Welcome to Ater, '+ME,r.me.owner?'You’re the broadcaster here.':'Say hi in chat.'));
+  if((authMode==='register'||authMode==='finish')&&r.codes)showCodes(r.codes,()=>toast('Welcome to Ater, '+ME,r.me.owner?'You’re the broadcaster here.':'Say hi in chat.'));
   else if(authMode==='recover')toast('Password reset',r.left+' recovery code'+(r.left===1?'':'s')+' left.'+(r.left<3?' Make new ones in Account & security.':''),6000);
   else toast('Welcome back, '+ME,r.me.owner?'You’re the broadcaster here.':'');
   if(VIEW()==='home')go('#/bigscreen');setTimeout(()=>cpIn.focus(),80);
@@ -959,7 +970,24 @@ async function openAccount(){
   meMenu.hidden=true;acErr('');acctM.hidden=false;$('#pwU').value=ME;
   const a=await aterApi('/api/account');if(a.error)return acErr(a.error);
   const av=$('#acAv');av.textContent=a.name[0];av.style.background=a.color||colorFor(a.name);
-  $('#acSum').replaceChildren(...[a.owner?'Broadcaster':a.mod?'Moderator':'Ater chatter','Joined '+new Date(a.created).toLocaleDateString([],{year:'numeric',month:'short',day:'numeric'}),a.msgs.toLocaleString()+' messages','Password changed '+ago(a.pwAt)].map(t=>h('span','pill',t)));
+  $('#acSum').replaceChildren(...[a.owner?'Broadcaster':a.mod?'Moderator':'Ater chatter','Joined '+new Date(a.created).toLocaleDateString([],{year:'numeric',month:'short',day:'numeric'}),a.msgs.toLocaleString()+' messages',a.hasPassword&&a.pwAt?'Password changed '+ago(a.pwAt):'No password'].filter(Boolean).map(t=>h('span','pill',t)));
+  const L=$('#acLinks');L.replaceChildren();
+  const pwRow=h('div','lnk');pwRow.append(icon('i-shield','i'),h('b',null,'Password'),h('span','st2',a.hasPassword?'Set':'Not set'));L.append(pwRow);
+  const ids=new Set([...(ATER.providers||[]).map(p=>p.id),...Object.keys(a.links||{})]);
+  for(const id of ids){
+    const pr=PROV[id]||[id,'i-link'],l=(a.links||{})[id],row=h('div','lnk');
+    row.append(icon(pr[1],'i'),h('b',null,pr[0]),h('span','st2',l?(l.name?'Linked as '+l.name:'Linked'):'Not linked'));
+    const sp=h('span');sp.style.flex='1';row.append(sp);
+    if(l){const b=h('button','btn btn-o btn-sm','Unlink');b.onclick=async()=>{const q=await aterApi('/api/account/unlink',{p:id});if(q.error)return acErr(q.error);toast(pr[0]+' unlinked','');openAccount()};row.append(b)}
+    else if((ATER.providers||[]).some(p=>p.id===id)){const b=h('a','btn btn-o btn-sm','Link');b.href='/api/auth/oauth/'+id+'/start?mode=link';row.append(b)}
+    L.append(row);
+  }
+  $('#pwCur').hidden=!a.hasPassword;$('#pwCur').required=a.hasPassword;
+  $('#pwF').querySelector('button').textContent=a.hasPassword?'Change password':'Set a password';
+  $('#pwH').textContent=a.hasPassword?'Changing it signs out your other devices.':'You sign in with a linked account. Add a password too, so you have another way in.';
+  $('#rcP').hidden=!a.hasPassword;$('#rcP').required=a.hasPassword;
+  $('#delP').hidden=!a.hasPassword;$('#delP').required=a.hasPassword;
+  ATER.hasPw=a.hasPassword;
   $('#rcH').textContent=a.codesLeft?a.codesLeft+' of 8 recovery codes left. Making new ones replaces all of them.':'You have no recovery codes left. Make new ones so a forgotten password isn’t the end of this account.';
   renderDevices();
 }
@@ -979,7 +1007,7 @@ $('#delF').onsubmit=async e=>{
   e.preventDefault();acErr('');
   if($('#delN').value.trim().toLowerCase()!==String(ME).toLowerCase())return acErr('Type your name exactly to confirm.');
   if(!confirm('Delete '+ME+' for good? This can’t be undone.'))return;
-  const r=await aterApi('/api/account/delete',{password:$('#delP').value});if(r.error)return acErr(r.error);
+  const r=await aterApi('/api/account/delete',{password:$('#delP').value,confirm:$('#delN').value.trim()});if(r.error)return acErr(r.error);
   acctM.hidden=true;ATER.me=null;ME=null;mkAR();syncAuth();aterStart();toast('Account deleted','Thanks for hanging out.');
 };
 $('#signBtn').onclick=()=>openAuth('login');
@@ -1388,6 +1416,20 @@ setInterval(()=>{renderPulse();if(VIEW()==='home'&&CR==='day')renderCommunity()}
 on('emotesets',()=>{if(!emoPick.hidden)renderEmo()});
 on('set',()=>{if(PANE==='inbox')renderInbox()});
 if(CONFIG.liveStatus&&!OV){checkLive();setInterval(checkLive,90000)}
+/* coming back from Google / Twitch / Kick */
+{
+  const q=new URLSearchParams(location.search),o=q.get('oauth');
+  if(o){
+    const pn=(PROV[q.get('p')]||[q.get('p')||'that account'])[0];
+    history.replaceState(null,'',location.pathname+location.hash);
+    if(o==='new'){oauthT=q.get('t')||'';setTimeout(()=>{openAuth('finish');$('#authN').value=q.get('n')||'';$('#authH').textContent='Signing up with '+pn+'. '+AUTH_TEXT.finish[4]},300)}
+    else if(o==='in')setTimeout(()=>toast('Signed in with '+pn,''),600);
+    else if(o==='linked')setTimeout(()=>{toast(pn+' linked','You can sign in with it now.');openAccount()},800);
+    else if(o==='taken')setTimeout(()=>toast('Already in use','That '+pn+' account is linked to a different Ater account.',6000),600);
+    else if(o==='off')setTimeout(()=>toast(pn+' sign-in isn’t set up on this site',''),600);
+    else if(o==='error')setTimeout(()=>toast('Couldn’t sign in',q.get('m')||'Try again.',6000),600);
+  }
+}
 /* Ater chat is always on; platform chatters come back only if you switched them on last time */
 syncAuth();aterStart();
 {const onL=LS.get('on',{});for(const p of['tw','kk','yt'])if(onL[p])connect(p)}

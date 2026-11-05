@@ -67,6 +67,7 @@
 <symbol id="i-poll" viewBox="0 0 24 24"><path d="M5 20V12M10 20V5M15 20v-9M20 20v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
 <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14M10 8l-4 4 4 4M6 12h10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-google" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.3c0-.8-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-7.9z"/><path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.5-2.7c-1 .7-2.2 1-3.8 1-2.9 0-5.4-2-6.3-4.6H2.1v2.8A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.7 14c-.2-.7-.4-1.3-.4-2s.1-1.4.4-2V7.2H2.1a11 11 0 0 0 0 9.6z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.1-3.1A11 11 0 0 0 2.1 7.2L5.7 10C6.6 7.4 9.1 5.4 12 5.4z"/></symbol>
 <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4m0 0h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="i-xs" viewBox="0 0 24 24"><path fill="currentColor" d="M17.8 3h3.1l-6.7 7.7L22 21h-6.2l-4.8-6.3L5.5 21H2.4l7.2-8.2L2 3h6.3l4.4 5.8zm-1.1 16.2h1.7L7.4 4.7H5.6z"/></symbol>
 <symbol id="i-dc" viewBox="0 0 24 24"><path fill="currentColor" d="M19.6 5.3A17 17 0 0 0 15.4 4l-.5 1.1a15.6 15.6 0 0 0-5.8 0L8.6 4a17 17 0 0 0-4.2 1.3C1.7 9.3 1 13.2 1.3 17a17 17 0 0 0 5.2 2.6l1.1-1.8c-.6-.2-1.2-.5-1.7-.9l.4-.3a12.2 12.2 0 0 0 10.4 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.8a17 17 0 0 0 5.2-2.6c.4-4.4-.7-8.3-2.1-11.7zM8.7 14.7c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1zm6.6 0c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z"/></symbol>
@@ -296,6 +297,8 @@
   <div class="modal" role="dialog" aria-labelledby="authT">
     <div class="mh"><span class="logo" aria-hidden="true"></span><h3 id="authT">Join Ater chat</h3><button class="ic" id="authX" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
     <div class="seg" id="authSeg"><button data-m="login" class="on" type="button">Sign in</button><button data-m="register" type="button">Create account</button></div>
+    <div class="oauth" id="authProv" hidden></div>
+    <div class="or" id="authOr" hidden><span>or with a password</span></div>
     <form id="authF">
       <label>Name<input id="authN" autocomplete="username" maxlength="20" spellcheck="false" autocapitalize="off" required></label>
       <label id="authCodeL" hidden>Recovery code<input id="authC" autocomplete="one-time-code" maxlength="12" spellcheck="false" autocapitalize="off" placeholder="xxxx-xxxx"></label>
@@ -328,6 +331,10 @@
   <div class="modal wide" role="dialog" aria-labelledby="acctT">
     <div class="mh"><span class="av" id="acAv"></span><h3 id="acctT">Account &amp; security</h3><button class="ic" id="acctX" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
     <div class="ac-sum" id="acSum"></div>
+    <section class="acs">
+      <h4>Ways to sign in</h4>
+      <div class="lnks" id="acLinks"></div>
+    </section>
     <section class="acs">
       <h4>Password</h4>
       <form id="pwF" class="ac-f">

@@ -821,3 +821,22 @@ html.ov .welcome,html.ov .jump{display:none!important}
 .thx{position:fixed;top:14px;left:50%;z-index:60;display:inline-flex;align-items:center;gap:8px;padding:7px 10px 7px 12px;border-radius:999px;background:#0a0a0bd9;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line2);color:var(--fg);font-size:13px;font-weight:600;opacity:0;transform:translate(-50%,-8px);transition:opacity .25s,transform .25s var(--ease);pointer-events:none}
 .thx.show,.thx:hover,.thx:focus-visible{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 .thx .i{width:15px;height:15px}
+
+/* ============================================================
+   SIGN IN WITH GOOGLE / TWITCH / KICK
+   ============================================================ */
+.oauth{display:flex;flex-direction:column;gap:6px}
+.oauth .btn{justify-content:center;padding:9px 14px;font-weight:600}
+.oauth .btn .i{width:17px;height:17px}
+.oauth .twitch{border-color:#a970ff66}.oauth .twitch .i{color:var(--tw)}.oauth .twitch:hover{background:#a970ff1a}
+.oauth .kick{border-color:#53fc1855}.oauth .kick .i{color:var(--kk)}.oauth .kick:hover{background:#53fc1814}
+.oauth .google:hover{background:#ffffff10}
+.or{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--fg3)}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.lnks{display:flex;flex-direction:column;gap:4px}
+.lnk{display:flex;align-items:center;gap:10px;padding:7px 8px 7px 10px;border-radius:12px;background:var(--base);border:1px solid var(--line);font-size:13px}
+.lnk .i{width:16px;height:16px}
+.lnk .st2{color:var(--fg3);font-size:12px}
+.uc-p .ver{display:inline-flex;align-items:center;gap:4px;color:var(--fg2);font-weight:600}
+.uc-p .ver .i{width:12px;height:12px}
+.uc-p .ver:hover{color:var(--fg)}
