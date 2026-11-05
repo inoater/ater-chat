@@ -98,7 +98,7 @@ function tagEl(p){const s=h('span','tag '+p);s.title=PN[p];s.append(icon(PI[p]))
 const EVI={sub:'b-sub',gift:'b-gifter',cash:'b-vip',raid:'e-raid'};
 function nameEl(m){const n=h('b','nm',m.name);n.style.color=m.color||colorFor(m.name);n.dataset.p=m.p;n.dataset.n=m.name;n.title='See everything '+m.name+' said';return n}
 function renderMsg(m,o={}){
-  const d=h('div','msg');d.dataset.k=m.p+':'+nm(m.name);d.dataset.p=m.p;if(m.sid)d.dataset.sid=m.sid;
+  const d=h('div','msg');d.dataset.k=m.p+':'+nm(m.name);d.dataset.p=m.p;if(m.sid)d.dataset.sid=m.sid;d._m=m;
   if(m.rp){const r=h('div','rp');r.title=m.rp.n+': '+m.rp.t;if(m.rp.id)r.dataset.to=m.rp.id;r.append(icon('e-reply'));r.append(h('b',null,'@'+m.rp.n),' '+m.rp.t);d.append(r)}
   if(o.ts!==false)d.append(h('span','ts',clock(m.ts)));
   if(m.p==='at')d.append(aterBadgeEl());else d.append(tagEl(m.p));
@@ -1053,7 +1053,7 @@ function renderUsers(){
   const us=ATER.pres.users||[],grp=[['Broadcaster',us.filter(u=>u.owner)],['Moderators',us.filter(u=>u.mod&&!u.owner)],['Chatters',us.filter(u=>!u.mod)]];
   for(const[t,l]of grp){
     if(!l.length)continue;L.append(h('h5',null,t+' · '+l.length));
-    for(const u of l){const r=h('div','ur');r.append(aterBadgeEl());for(const b of aterBadges(u.b))r.append(badgeEl(b));const n=h('span',null,u.name);n.style.color=u.color||colorFor(u.name);r.append(n);r.onclick=()=>userCard('at',u.name);L.append(r)}
+    for(const u of l){const r=h('div','ur');r.dataset.n=u.name;r.dataset.p='at';r.append(aterBadgeEl());for(const b of aterBadges(u.b))r.append(badgeEl(b));const n=h('span',null,u.name);n.style.color=u.color||colorFor(u.name);r.append(n);r.onclick=()=>userCard('at',u.name);L.append(r)}
   }
   const anon=Math.max(0,(ATER.pres.n||0)-us.length);
   L.append(h('p','hint',(us.length?'':'No one signed in yet. ')+(anon?anon+' more watching without an account.':'')));
@@ -1227,6 +1227,141 @@ palQ.oninput=()=>{palI=0;renderPal()};
 palQ.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();palI=(palI+(e.key==='ArrowDown'?1:-1)+palA.length)%Math.max(1,palA.length);renderPal();const on_=palL.querySelector('button.on');if(on_)on_.scrollIntoView({block:'nearest'})}else if(e.key==='Enter'){e.preventDefault();palRun(palI)}};
 pal.onclick=e=>{if(e.target===pal)setPal(false)};
 $('#palBtn').onclick=()=>setPal(true);
+
+/* =====================================================================
+   RIGHT-CLICK MENUS: built in, so they work the same everywhere.
+   Shift + right-click still opens the browser's own menu.
+   ===================================================================== */
+const ctx=$('#ctx');let ctxItems=[],ctxI=-1,ctxSub=null;
+function closeCtx(){ctx.hidden=true;ctx.replaceChildren();ctxItems=[];ctxI=-1;if(ctxSub){ctxSub.remove();ctxSub=null}}
+function ctxMenu(items,x,y,parent){
+  const el=parent?h('div','ctxm sub'):ctx;el.replaceChildren();el.setAttribute('role','menu');
+  const list=[];
+  for(const it of items.filter(Boolean)){
+    if(it.sep){if(el.lastChild&&!el.lastChild.classList.contains('sep'))el.append(h('div','sep'));continue}
+    if(it.head){el.append(h('div','hd',it.head));continue}
+    const b=h('button',it.danger?'danger':'');b.type='button';b.setAttribute('role','menuitem');
+    if(it.icon)b.append(icon(it.icon,'i'));else b.append(h('span','i'));
+    b.append(h('span','l',it.label));
+    if(it.hint)b.append(h('span','k',it.hint));
+    if(it.sub)b.append(h('span','k','›'));
+    if(it.disabled)b.disabled=true;
+    b.onmouseenter=()=>{focusCtx(list.indexOf(b),el);if(!parent){if(ctxSub){ctxSub.remove();ctxSub=null}if(it.sub){const r=b.getBoundingClientRect();ctxSub=ctxMenu(it.sub,r.right-4,r.top-5,el)}}};
+    b.onclick=e=>{e.stopPropagation();if(it.sub){const r=b.getBoundingClientRect();if(ctxSub)ctxSub.remove();ctxSub=ctxMenu(it.sub,r.right-4,r.top-5,el);return}closeCtx();it.run&&it.run()};
+    b._it=it;list.push(b);el.append(b);
+  }
+  if(el.lastChild&&el.lastChild.classList.contains('sep'))el.lastChild.remove();
+  if(!list.length)return null;
+  if(parent)document.body.append(el);
+  el.hidden=false;el.style.left='0';el.style.top='0';
+  const r=el.getBoundingClientRect(),W=innerWidth,H=innerHeight;
+  if(parent&&x+r.width>W-8)x=parent.getBoundingClientRect().left-r.width+4;
+  el.style.left=Math.max(8,Math.min(x,W-r.width-8))+'px';el.style.top=Math.max(8,Math.min(y,H-r.height-8))+'px';
+  if(!parent){ctxItems=list;ctxI=-1}else el._items=list;
+  return el;
+}
+function focusCtx(i,el=ctx){const l=el===ctx?ctxItems:el._items;if(!l||!l.length)return;if(el===ctx)ctxI=i;l.forEach((b,j)=>b.classList.toggle('on',j===i))}
+document.addEventListener('keydown',e=>{
+  if(ctx.hidden)return;
+  if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();closeCtx();return}
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();e.stopImmediatePropagation();const n=ctxItems.length;let i=ctxI;do{i=(i+(e.key==='ArrowDown'?1:-1)+n)%n}while(ctxItems[i].disabled&&i!==ctxI);focusCtx(i)}
+  else if(e.key==='Enter'&&ctxI>=0){e.preventDefault();e.stopImmediatePropagation();ctxItems[ctxI].click()}
+  else if(e.key==='ArrowRight'&&ctxI>=0&&ctxItems[ctxI]._it.sub){e.preventDefault();ctxItems[ctxI].click();if(ctxSub){ctxSub._items[0].classList.add('on')}}
+},true);
+document.addEventListener('pointerdown',e=>{if(!ctx.hidden&&!ctx.contains(e.target)&&!(ctxSub&&ctxSub.contains(e.target)))closeCtx()},true);
+addEventListener('blur',closeCtx);addEventListener('resize',closeCtx);
+document.addEventListener('scroll',()=>{if(!ctx.hidden)closeCtx()},true);
+
+/* what each thing offers */
+const isMod=()=>!!(ATER.me&&ATER.me.mod);
+async function modCmd(t){const r=await aterApi('/api/send',{text:t});if(r.error)toast('Didn’t work',r.error);else if(r.info)toast('Done',r.info)}
+function userItems(p,name,m){
+  const at=p==='at',me=at&&ME&&nm(name)===nm(ME),out=[];
+  out.push({head:name+(at?'':' · '+PN[p])});
+  if(m&&m.sid&&ATER.me)out.push({label:'Reply',icon:'e-reply',run:()=>setReply({sid:m.sid,name:m.name,text:m.text})});
+  if(at&&ATER.me&&!me)out.push({label:'Whisper',icon:'i-send',run:()=>{pane('chat');cpIn.value='/w '+name+' ';cpIn.focus()}});
+  if(!me)out.push({label:'Mention',icon:'i-chat',run:()=>{pane('chat');cpIn.value=(cpIn.value?cpIn.value.replace(/\s*$/,' '):'')+'@'+name+' ';cpIn.focus()}});
+  out.push({label:at?'Profile and messages':'Their messages',icon:'i-users',run:()=>userCard(p,name)});
+  const pu=profileUrl(p,name);if(pu)out.push({label:'Open on '+PN[p],icon:'i-pop',run:()=>window.open(pu,'_blank','noopener')});
+  out.push({sep:1});
+  if(m)out.push({label:'Copy message',icon:'i-copy',run:()=>copy(m.text).then(ok=>ok&&toast('Copied',''))});
+  out.push({label:'Copy name',icon:'i-copy',run:()=>copy(name).then(ok=>ok&&toast('Copied',name))});
+  if(!me)out.push({label:isIgn(name)?'Show them again':'Ignore (just for me)',icon:'i-x',run:()=>{const n2=nm(name);SET.ign=isIgn(name)?SET.ign.filter(x=>x!==n2):[...SET.ign,n2];saveSet();toast(isIgn(name)?'Ignoring '+name:'Showing '+name+' again','')}});
+  if(m&&m.sid&&ATER.me&&!me)out.push({label:'Report…',icon:'i-flag',run:async()=>{const why=prompt('Report '+name+'’s message to the moderators. What’s wrong with it? (optional)','');if(why===null)return;const r=await aterApi('/api/report',{id:m.sid,reason:why});toast(r.error?'Didn’t work':'Reported',r.error||r.info||'')}});
+  if(at&&isMod()&&!me){
+    out.push({sep:1},{head:'Moderate'});
+    if(m&&m.sid){out.push({label:'Pin for everyone',icon:'i-pin',run:()=>aterApi('/api/pin',{id:m.sid})});out.push({label:'Delete message',icon:'i-trash',danger:1,run:()=>aterApi('/api/del',{id:m.sid})})}
+    out.push({label:'Timeout',icon:'i-mute',sub:[['1 minute','1m'],['10 minutes','10m'],['1 hour','1h'],['24 hours','24h'],['7 days','7d']].map(([l,d])=>({label:l,run:()=>modCmd('/mute '+name+' '+d)})).concat([{sep:1},{label:'Unmute',run:()=>modCmd('/unmute '+name)}])});
+    out.push({label:'Delete their recent messages',icon:'i-trash',run:()=>modCmd('/purge '+name)});
+    out.push({label:'Ban…',icon:'i-shield',danger:1,run:()=>{const why=prompt('Ban '+name+' from Ater chat? Reason (optional):','');if(why!==null)modCmd('/ban '+name+(why?' '+why:''))}});
+    if(ATER.me.owner){const u=(ATER.pres.users||[]).find(x=>nm(x.name)===nm(name));out.push(u&&u.mod?{label:'Remove moderator',icon:'i-shield',run:()=>modCmd('/unmod '+name)}:{label:'Make moderator',icon:'i-shield',run:()=>modCmd('/mod '+name)})}
+  }
+  return out;
+}
+function stageItems(chip){
+  const cur=stageEmbed(),th=document.body.classList.contains('theater'),chatOff=vBig.dataset.chat==='off',pk=atPick(),out=[];
+  if(chip&&chip.e){
+    const e=chip.e;out.push({head:e.u+' · '+PLAT[e.p].l});
+    if(!chip.auto)out.push({label:'Watch this',icon:'i-tv',run:()=>{EMB.main=ekey(e);EMB.follow=false;saveEmb();renderStage();heroSync();emit('stage')}});
+    else out.push({label:'Follow Ater',icon:'i-star',run:()=>follow(true)});
+    out.push({label:'Open on '+PLAT[e.p].l,icon:'i-pop',run:()=>window.open(PLAT[e.p].page(e.u),'_blank','noopener')});
+    if(!chip.auto)out.push({label:'Remove from my list',icon:'i-x',run:()=>removeEmbed(e)});
+    if(isMod()&&!isOwn(e))out.push({sep:1},(pk&&ekey(pk)===ekey(e))?{label:'Clear the Ater pick',icon:'i-star',run:()=>aterApi('/api/feature',{clear:true})}:{label:'Make it the Ater pick',icon:'i-star',run:async()=>{const r=await aterApi('/api/feature',{p:e.p,u:e.u});if(r.error)toast('Didn’t work',r.error)}});
+    out.push({sep:1});
+  }
+  out.push({head:'Big Screen'});
+  out.push({label:th?'Exit theater mode':'Theater mode',icon:'i-theater',hint:'T',run:()=>setTheater(!th)});
+  out.push({label:'Swap chat side',icon:'i-swap',run:swapSides});
+  out.push({label:chatOff?'Show chat':'Hide chat',icon:'i-chat',run:()=>setChat(chatOff)});
+  out.push({label:'Add a stream…',icon:'i-plus',run:()=>{if(th)setTheater(false);setAdd(true)}});
+  if(pk&&!following())out.push({label:'Back to the Ater pick ('+pk.u+')',icon:'i-star',run:()=>follow(true)});
+  if(GUEST.p)out.push({label:'Stop '+GUEST.u+'’s chat',icon:'i-x',run:()=>{guestStop();syncGuest()}});
+  else if(guestCandidate())out.push({label:'Show '+guestCandidate().u+'’s chat',icon:'i-chat',run:()=>{const g=guestCandidate();guestStart(g.p,g.u)}});
+  out.push({sep:1},{label:'Pop out chat',icon:'i-pop',run:popout},{label:'Copy link to this layout',icon:'i-link',run:()=>copy(layoutUrl()).then(ok=>toast(ok?'Layout link copied':'Layout link',ok?'':layoutUrl()))});
+  if(cur&&isMod()&&!isOwn(cur)&&!cur.pick)out.push({label:'Make '+cur.u+' the Ater pick',icon:'i-star',run:()=>$('#pickBtn').click()});
+  return out;
+}
+function chatItems(){
+  return[{head:'Chat'},
+    {label:'Jump to present',icon:'i-chev',disabled:stick,run:()=>jump.click()},
+    {label:'Search chat',icon:'i-search',run:()=>openSearch()},
+    {label:'Clear this window',icon:'i-x',hint:'/cls',run:()=>runCmd('/cls')},
+    {label:'Bigger text',icon:'i-plus',run:()=>{SET.fs=Math.min(32,SET.fs+1);saveSet()}},
+    {label:'Smaller text',icon:'i-chev',run:()=>{SET.fs=Math.max(10,SET.fs-1);saveSet()}},
+    {sep:1},{label:'Pop out chat',icon:'i-pop',run:popout},{label:'Chat settings',icon:'i-gear',run:()=>pane('set')},
+    isMod()?{label:'Mod tab',icon:'i-shield',run:()=>pane('mod')}:null];
+}
+function pageItems(){
+  return[{label:'Home',icon:'i-home',run:()=>go('#/')},{label:'Big Screen',icon:'i-tv',run:()=>go('#/bigscreen')},{label:'Search or run a command',icon:'i-search',hint:'Ctrl K',run:()=>setPal(true)},
+    ATER.me?{label:'Account & security',icon:'i-shield',run:openAccount}:(aterBase()!=null?{label:'Sign in',icon:'i-chat',run:()=>openAuth('login')}:null)];
+}
+document.addEventListener('contextmenu',e=>{
+  if(e.shiftKey||OV)return;                                   /* the browser's own menu */
+  const t=e.target;
+  if(t.closest('input,textarea,select,[contenteditable],a[href],iframe'))return; /* keep copy/paste and link menus */
+  if(String(getSelection())&&!t.closest('.ech'))return;       /* selected text: let them copy it */
+  let items=null;
+  const msg=t.closest('#feed .msg,#miniFeed .msg,.uc-l .msg'),nmEl=t.closest('.nm[data-n],.ur'),chip=t.closest('.ech');
+  if(msg&&msg._m)items=userItems(msg._m.p,msg._m.name,msg._m);
+  else if(nmEl){const n=nmEl.dataset.n||nmEl.textContent.trim(),p=nmEl.dataset.p||'at';items=userItems(p,n,null)}
+  else if(chip){const auto=chip.dataset.auto==='1',e2=auto?(ownLive()||atPick()):EMB.list.find(x=>ekey(x)===chip.dataset.k);items=stageItems({e:e2,auto})}
+  else if(t.closest('.stage,#thx'))items=stageItems();
+  else if(t.closest('#chatp'))items=chatItems();
+  else items=pageItems();
+  if(!items)return;
+  e.preventDefault();closeCtx();ctxMenu(items,e.clientX,e.clientY);
+  ctx.append(h('div','foot','Shift + right-click for the browser menu'));
+});
+
+/* theater mode: a quiet "exit" pill that shows when the mouse moves */
+{
+  const thx=$('#thx');let tmr=0;
+  thx.onclick=()=>setTheater(false);
+  addEventListener('mousemove',()=>{
+    if(!document.body.classList.contains('theater')){thx.hidden=true;return}
+    thx.hidden=false;thx.classList.add('show');clearTimeout(tmr);tmr=setTimeout(()=>thx.classList.remove('show'),2200);
+  },{passive:true});
+}
 
 /* =====================================================================
    KEYBOARD
