@@ -1,0 +1,38 @@
+'use strict';
+/*
+ * The Ater 7TV set: well-known 7TV emotes every Ater chatter can use,
+ * whether or not the channel has 7TV. Images load from 7TV's CDN.
+ * [name, 7TV emote id, width at 28px tall (wide emotes are wider)]
+ * Moderators can add more from chat settings with a 7TV link.
+ */
+const SEVENTV = [
+  ['KEKW', '01F61B1440000991F7SWQNMVX7', 28], ['OMEGALUL', '01F00Z3A9G0007E4VV006YKSK9', 28],
+  ['Pog', '01EZTCN91800012PTN006Q50PR', 28], ['PogU', '01F6M3N17G000B5V5G2M2RYJN7', 28],
+  ['Sadge', '01EZPG1FN80001SNAW00ADK2DY', 37], ['monkaS', '01F78CHJ2G0005TDSTZFBDGMK4', 28],
+  ['peepoHappy', '01F6RC8C1G0003SBEQ3QZTEE99', 38], ['Clap', '01F6NE9AER000CKKT9BSDYGT0J', 28],
+  ['catJAM', '01F6MQ33FG000FFJ97ZB8MWV52', 28], ['xdd', '01FF3R5C30000FF5VVCKV49G6J', 50],
+  ['Aware', '01FFWH9WV80000JT8GHDKHJNZC', 31], ['Clueless', '01F6T8NM9R0007M5BTFWSP1YSJ', 32],
+  ['ICANT', '01FA0PBXM8000AD7Y8T9ZMTFZ5', 28], ['LETSGO', '01F6RD7B88000B4N55W5NS55R7', 28],
+  ['EZ', '01F9FS6EEG0006XXD6DX0K9Y04', 28], ['GIGACHAD', '01F6MZGCNG000255K4X1K7NTHR', 28],
+  ['Okayge', '01F7GJ0N4R00074A83FVHRDMDB', 37], ['Stare', '01FA0WRBM0000AD7Y8T9ZJEDXQ', 32],
+  ['Susge', '01F6S7PENR0008HT14D95H43BY', 37], ['WAYTOODANK', '01EZPJ8YRR000C438200A44F2Y', 28],
+  ['PepeLaugh', '01F6Q76NN80005589X3BDK9CN1', 28], ['FeelsStrongMan', '01F604RDP8000B1Q26TYT3H5PQ', 28],
+  ['BatChest', '01FH5KYA9R000D4WNXNQW4KVF2', 28], ['Chatting', '01FAK9C8MR0004HKF2ZK1YPQ5A', 28],
+  ['Gladge', '01F6N6N8WG00052X5637DPSM77', 28], ['NOTED', '01GEEHRQYG0006MCY6R6BPV3HB', 28],
+  ['COPIUM', '01F6ME7ADR0000WDA7ERT9H30R', 28], ['Hmm', '01F6MA6Y100002B6P5MWZ5D916', 28],
+  ['peepoClap', '01F6NET6G00009JYTB75QDKV1S', 28], ['pepeD', '01F2ZWD6CR000DSBG200DM9SGM', 28],
+  ['forsenCD', '01EZPRG5RR0002RYT500A3PHPQ', 28], ['Erm', '01GNG5CGM000043VNACR8SMB6D', 28],
+  ['Wokege', '01FEEK9MRG000FR0PC38FM26SD', 28], ['Bedge', '01F6MXJD8R000F76KNAAV5HDGD', 28],
+  ['Prayge', '01F6NACCD80006SZ7ZW5FMWKWK', 28], ['widepeepoHappy', '01GF1Y2Q5G0000BGNJSP34TQRD', 70],
+  ['monkaW', '01F6NPHCN0000BEKN8ZXWQNSDC', 28], ['KEKL', '01F6S7T5T8000B4N55W5NRFBY4', 28],
+  ['docnotL', '01F6NS89X000013ACMMJPDTDNP', 28], ['Deadge', '01F8YE5QNR00081476FRV8XDEZ', 28],
+];
+const ID_RE = /^[0-9A-Za-z]{20,30}$/;
+const cdn = (id) => `https://cdn.7tv.app/emote/${id}/2x.webp`;
+/** "https://7tv.app/emotes/01F6…" or a bare id -> id */
+function parse7tv(s) {
+  const m = String(s || '').trim().match(/(?:7tv\.app\/emotes\/|cdn\.7tv\.app\/emote\/)?([0-9A-Za-z]{20,30})/);
+  return m && ID_RE.test(m[1]) ? m[1] : null;
+}
+
+module.exports = { SEVENTV, cdn, parse7tv };

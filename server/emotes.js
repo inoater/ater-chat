@@ -4,6 +4,9 @@
  * Moderators can add more (PNG, GIF or WebP) from chat settings; those are
  * kept in the data file and served from /api/emote/<name>.
  */
+const { SEVENTV, cdn, parse7tv } = require('./emotes-7tv');
+const SEVEN = new Map(SEVENTV.map(([n, id, w]) => [n, { id, w }]));
+
 const RAINBOW =
   '<defs><linearGradient id="r" x1="0" y1="0" x2="1" y2="1">' +
   '<stop offset="0" stop-color="#6366f1"/><stop offset=".3" stop-color="#a855f7"/>' +
@@ -53,23 +56,38 @@ const NAME_RE = /^[A-Za-z][A-Za-z0-9_]{1,23}$/;
 const UPLOAD_RE = /^data:(image\/(?:png|gif|webp));base64,([A-Za-z0-9+/=]+)$/;
 const MAX_BYTES = 300_000;
 
-/** Every emote, built-in first, as { name, url } for clients. */
+/**
+ * Every emote for clients: Ater's own, then the Ater 7TV set, then ones
+ * moderators added (uploads or 7TV links). { name, url, set, w?, by? }
+ */
 function emoteList(db) {
-  const out = Object.keys(BUILTIN).map((name) => ({ name, url: '/api/emote/' + name, b: 1 }));
-  for (const [name, e] of Object.entries(db.emotes)) out.push({ name, url: `/api/emote/${name}?v=${e.ts}`, by: e.by });
+  const out = Object.keys(BUILTIN).map((name) => ({ name, url: '/api/emote/' + name, set: 'ater', b: 1 }));
+  for (const [name, e] of SEVEN) if (!db.emotes[name]) out.push({ name, url: cdn(e.id), set: '7tv', w: e.w, b: 1 });
+  for (const [name, e] of Object.entries(db.emotes)) {
+    out.push(e.type === '7tv' ? { name, url: cdn(e.id), set: '7tv', by: e.by } : { name, url: `/api/emote/${name}?v=${e.ts}`, set: 'ater', by: e.by });
+  }
   return out;
+}
+
+/** A moderator adding a 7TV emote by link or id. Returns { error } or the emote record. */
+function check7tv(db, name, link) {
+  const id = parse7tv(link);
+  if (!id) return { error: 'Paste a 7TV emote link, like https://7tv.app/emotes/01F6…' };
+  if (!NAME_RE.test(name)) return { error: 'Emote names: 2 to 24 letters, numbers or _, starting with a letter.' };
+  if (BUILTIN[name] || SEVEN.has(name) || db.emotes[name]) return { error: 'There is already an emote called ' + name + '.' };
+  return { type: '7tv', id };
 }
 
 /** Check an upload. Returns { error } or { type, data }. SVG uploads are refused on purpose. */
 function checkUpload(db, name, dataUrl) {
   if (!NAME_RE.test(name)) return { error: 'Emote names: 2 to 24 letters, numbers or _, starting with a letter.' };
-  if (BUILTIN[name] || db.emotes[name]) return { error: 'There is already an emote called ' + name + '.' };
+  if (BUILTIN[name] || SEVEN.has(name) || db.emotes[name]) return { error: 'There is already an emote called ' + name + '.' };
   const m = String(dataUrl || '').match(UPLOAD_RE);
   if (!m) return { error: 'PNG, GIF or WebP only.' };
   if ((m[2].length * 3) / 4 > MAX_BYTES) return { error: 'Keep emotes under 300 KB.' };
   return { type: m[1], data: m[2] };
 }
 
-const isEmote = (db, word) => Boolean(BUILTIN[word] || db.emotes[word]);
+const isEmote = (db, word) => Boolean(BUILTIN[word] || SEVEN.has(word) || db.emotes[word]);
 
-module.exports = { BUILTIN, emoteList, checkUpload, isEmote };
+module.exports = { BUILTIN, SEVEN, emoteList, checkUpload, check7tv, isEmote, cdn };

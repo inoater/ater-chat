@@ -135,7 +135,7 @@ function sevApply(toks,maps){
 function knownEmotes(){
   const out=[],seen=new Set();
   const add=(sec,name,url)=>{if(seen.has(name))return;seen.add(name);out.push({sec,name,url})};
-  for(const[n,u]of ATER.emotes)add('Ater',n,u);
+  for(const e of ATER.list||[]){const u=ATER.emotes.get(e.name);if(u)add(e.set==='7tv'?'Ater · 7TV':'Ater',e.name,u)}
   for(const[k,o]of Object.entries(SEV.ch))if(o.map)for(const[n,e]of o.map)add('7TV · '+k.split(':')[1],n,e.url);
   for(const[n,u]of SEEN_EMO)add('Seen in chat',n,u);
   if(SEV.g&&SEV.g.map)for(const[n,e]of SEV.g.map)add('7TV global',n,e.url);
@@ -371,7 +371,7 @@ function YouTube(){
 }
 
 /* ---- Ater chat (ater-server.js): our own chatters, emotes, pins, polls, whispers ---- */
-const ATER={up:false,me:null,es:null,emotes:new Map(),list:[],pins:[],poll:null,pres:{n:0,users:[]},settings:{},seen:new Set()};
+const ATER={up:false,me:null,es:null,emotes:new Map(),ew:new Map(),list:[],pins:[],poll:null,pres:{n:0,users:[]},settings:{},seen:new Set()};
 function aterBase(){if(CONFIG.server)return CONFIG.server.replace(/\/+$/,'');return/^https?:$/.test(location.protocol)?'':null}
 async function aterApi(path,body){
   const b=aterBase();if(b==null)return{error:'Ater chat needs ater-server.js running.'};
@@ -382,9 +382,11 @@ async function aterApi(path,body){
     return j;
   }catch{return{error:'Can’t reach the Ater chat server.'}}
 }
+/* Ater's own emotes live on the server; the Ater 7TV set comes straight from 7TV's CDN */
+function setEmotes(list,b){ATER.emotes=new Map(list.map(e=>[e.name,/^https?:/.test(e.url)?e.url:b+e.url]));ATER.ew=new Map(list.filter(e=>e.w&&e.w!==28).map(e=>[e.name,e.w]))}
 function aterTokens(text){
   const out=[];
-  for(const w of String(text).split(/(\s+)/)){if(!w)continue;const u=ATER.emotes.get(w);if(u)out.push({url:u,name:w,src:'at'});else if(typeof out[out.length-1]==='string')out[out.length-1]+=w;else out.push(w)}
+  for(const w of String(text).split(/(\s+)/)){if(!w)continue;const u=ATER.emotes.get(w);if(u)out.push({url:u,name:w,src:'at',w:ATER.ew.get(w)});else if(typeof out[out.length-1]==='string')out[out.length-1]+=w;else out.push(w)}
   return out;
 }
 const AT_BADGE={owner:['host','Broadcaster'],mod:['mod','Moderator'],og:['og','OG: one of the first 100 on Ater']};
@@ -402,7 +404,7 @@ function aterStart(){
   const L=(ev,f)=>es.addEventListener(ev,e=>{let d;try{d=JSON.parse(e.data)}catch{return}f(d)});
   L('hello',d=>{
     ATER.up=true;ATER.me=d.me;ME=d.me&&d.me.name;mkAR();
-    ATER.list=d.emotes||[];ATER.emotes=new Map(ATER.list.map(e=>[e.name,b+e.url]));
+    ATER.list=d.emotes||[];setEmotes(ATER.list,b);
     ATER.pins=d.pins||[];ATER.poll=d.poll;ATER.pres=d.presence||{n:0,users:[]};ATER.settings=d.settings||{};
     status('at','on',ATER.pres.n+' here');emit('ater','hello');
     for(const m of d.history||[])aterMsg(m,true);
@@ -413,7 +415,7 @@ function aterStart(){
   L('pins',d=>{ATER.pins=d||[];emit('ater','pins')});
   L('poll',d=>{ATER.poll=d;emit('ater','poll')});
   L('presence',d=>{ATER.pres=d;status('at','on',d.n+' here');emit('ater','presence')});
-  L('emotes',d=>{ATER.list=d;ATER.emotes=new Map(d.map(e=>[e.name,b+e.url]));emit('ater','emotes')});
+  L('emotes',d=>{ATER.list=d;setEmotes(d,b);emit('ater','emotes')});
   L('settings',d=>{ATER.settings=d||{};emit('ater','settings')});
   L('notice',d=>emit('aternotice',d));
   L('whisper',d=>emit('whisper',d));

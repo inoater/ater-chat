@@ -28,7 +28,7 @@
  *   moderators:
  *   POST /api/del  /api/pin  /api/unpin   { id }
  *   POST /api/poll                        { q, opts[], secs }
- *   POST /api/emote                       { name, data }   data is a data: URL
+ *   POST /api/emote                       { name, data } (a data: URL) or { name, link } (a 7TV emote link)
  *   GET  /api/mod/reports                 open reports
  *   POST /api/mod/reports/resolve         { id, action: dismiss | delete | mute | ban }
  *   GET  /api/mod/log                     recent moderator actions
@@ -41,7 +41,7 @@ const path = require('path');
 const { openStore } = require('./store');
 const { createAccounts, pub, isMod } = require('./accounts');
 const { createChat } = require('./chat');
-const { BUILTIN, emoteList, checkUpload } = require('./emotes');
+const { BUILTIN, SEVEN, checkUpload, check7tv, cdn } = require('./emotes');
 const { createStatic } = require('./static');
 const { setHeaders, sameSite, limiter } = require('./security');
 
@@ -99,8 +99,9 @@ async function createApp({
         const name = decodeURIComponent(p.slice('/api/emote/'.length));
         const h = { 'Cache-Control': 'public, max-age=86400', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'" };
         if (BUILTIN[name]) { res.writeHead(200, { ...h, 'Content-Type': 'image/svg+xml' }); return res.end(BUILTIN[name]); }
-        const e = state.emotes[name];
+        const e = state.emotes[name] || (SEVEN.has(name) && { type: '7tv', id: SEVEN.get(name).id });
         if (!e) { res.writeHead(404); return res.end(); }
+        if (e.type === '7tv') { res.writeHead(302, { Location: cdn(e.id), 'Cache-Control': 'public, max-age=86400' }); return res.end(); }
         res.writeHead(200, { ...h, 'Content-Type': e.type });
         return res.end(Buffer.from(e.data, 'base64'));
       }
@@ -190,9 +191,9 @@ async function createApp({
     }
     if (p === '/api/emote') {
       const name = String(b.name || '');
-      const r = checkUpload(state, name, b.data);
+      const r = b.link ? check7tv(state, name, b.link) : checkUpload(state, name, b.data);
       if (r.error) return json(res, 400, r);
-      chat.addEmote(u.name, name, { type: r.type, data: r.data, by: u.name, ts: Date.now() });
+      chat.addEmote(u.name, name, { ...r, by: u.name, ts: Date.now() });
       return json(res, 200, { ok: true });
     }
     return json(res, 404, { error: 'Not found' });
