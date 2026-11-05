@@ -1,11 +1,12 @@
 FROM node:22-alpine
 
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
 COPY public ./public
 
-# chat data lives in a volume so it survives new images
+# without MONGODB_URI, chat data lives in a volume so it survives new images
 RUN mkdir -p /data && chown node:node /data
 VOLUME /data
 

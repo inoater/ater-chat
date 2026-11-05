@@ -1,0 +1,22 @@
+# Render Blueprint for Ater Live: one Node web service, data in MongoDB Atlas.
+# New setups: Render dashboard -> New -> Blueprint -> pick this repo.
+# MONGODB_URI is a secret: Render asks for it when the Blueprint is created.
+services:
+  - type: web
+    name: ater-live
+    runtime: node
+    region: frankfurt
+    plan: free            # sleeps after 15 idle minutes; "starter" stays on
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ATER_OWNER     # this account is the broadcaster, whoever signs up first
+        value: inoater
+      - key: MONGODB_DB
+        value: ater
+      - key: MONGODB_URI
+        sync: false
