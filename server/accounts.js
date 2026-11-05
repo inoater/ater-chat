@@ -11,6 +11,9 @@
  * - Lockout: 5 wrong passwords lock that account's sign-in for 15 minutes.
  * - Deleted names are held for 30 days so nobody can pick one up right away
  *   and pose as that person.
+ * - Linked sign-ins (Google, Twitch, Kick): an account can have a password,
+ *   linked providers, or both, but never zero ways in. Linked Twitch and Kick
+ *   names show on the public profile as verified.
  */
 const crypto = require('crypto');
 const { promisify } = require('util');
@@ -48,6 +51,7 @@ function badges(u) {
   return b;
 }
 const pub = (u) => (u ? { name: u.name, color: u.color || '', b: badges(u), mod: isMod(u), owner: isOwner(u), created: u.created } : null);
+const PROVIDER_NAMES = { google: 'Google', twitch: 'Twitch', kick: 'Kick' };
 
 function parseCookies(header) {
   const out = {};
@@ -93,6 +97,11 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
 
   const saveUser = (u) => store.saveUser(u);
   const find = (n) => users.get(lc(n)) || null;
+  /* provider identity -> account, e.g. "twitch:12345" -> "somename" */
+  const idx = new Map();
+  for (const [k, u] of users) for (const [p, l] of Object.entries(u.links || {})) idx.set(p + ':' + l.id, k);
+  const findByIdentity = (p, id) => users.get(idx.get(p + ':' + id)) || null;
+  const ways = (u) => (u.hash ? 1 : 0) + Object.keys(u.links || {}).length;
 
   function cookieFlags(req) {
     const secure = secureCookies === true || (secureCookies === 'auto' && (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted));
@@ -168,6 +177,7 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
   }
 
   async function checkPassword(u, pw) {
+    if (!u.hash) return false;
     const a = Buffer.from(await hashPw(String(pw || ''), u.salt), 'hex');
     return crypto.timingSafeEqual(a, Buffer.from(u.hash, 'hex'));
   }
@@ -187,6 +197,10 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
     const k = lc(name), u = users.get(k);
     const mins = locked(k);
     if (mins) return { error: `Too many wrong passwords. Try again in ${mins} minute${mins > 1 ? 's' : ''}, or use a recovery code.`, status: 429 };
+    if (u && !u.hash) {
+      const via = Object.keys(u.links || {}).map((p) => PROVIDER_NAMES[p] || p).join(' or ');
+      return { error: `${u.name} signs in with ${via || 'a linked account'}. Use that button, or a recovery code to set a password.`, status: 401 };
+    }
     if (!u || !(await checkPassword(u, password))) {
       if (!u) await hashPw(String(password || ''), 'x'.repeat(32)); // same timing whether or not the name exists
       failed(k);
@@ -196,6 +210,8 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
     if (owner && k === owner && !isOwner(u)) { u.roles = [...(u.roles || []), 'owner']; await saveUser(u); }
     return { user: u };
   }
+  /* sign-in through a linked provider skips the password; the broadcaster rule still applies */
+  async function ownerCheck(u) { if (owner && lc(u.name) === owner && !isOwner(u)) { u.roles = [...(u.roles || []), 'owner']; await saveUser(u); } }
 
   async function recover(name, code, newPassword) {
     const k = lc(name), u = users.get(k);
@@ -217,7 +233,8 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
   }
 
   async function changePassword(u, current, next, keepSid) {
-    if (!(await checkPassword(u, current))) return { error: 'Your current password is wrong.', status: 401 };
+    const setting = !u.hash; // accounts made with Google/Twitch/Kick can add a password without one
+    if (!setting && !(await checkPassword(u, current))) return { error: 'Your current password is wrong.', status: 401 };
     const pp = passwordProblem(String(next || ''), u.name);
     if (pp) return { error: pp, status: 400 };
     u.salt = crypto.randomBytes(16).toString('hex');
@@ -225,22 +242,23 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
     u.pwAt = now();
     await saveUser(u);
     await dropSessions(u, keepSid);
-    return { ok: true, info: 'Password changed. Your other devices were signed out.' };
+    return { ok: true, info: setting ? 'Password set. You can sign in with it too now.' : 'Password changed. Your other devices were signed out.' };
   }
 
   async function newCodes(u, password) {
-    if (!(await checkPassword(u, password))) return { error: 'Your password is wrong.', status: 401 };
+    if (u.hash && !(await checkPassword(u, password))) return { error: 'Your password is wrong.', status: 401 };
     const rc = makeCodes();
     u.rc = rc.stored;
     await saveUser(u);
     return { ok: true, codes: rc.codes };
   }
 
-  async function deleteAccount(u, password) {
-    if (!(await checkPassword(u, password))) return { error: 'Your password is wrong.', status: 401 };
+  async function deleteAccount(u, password, confirmName) {
+    if (u.hash ? !(await checkPassword(u, password)) : lc(confirmName) !== lc(u.name)) return { error: u.hash ? 'Your password is wrong.' : 'Type your name to confirm.', status: 401 };
     if (isOwner(u)) return { error: 'The broadcaster account can’t be deleted from here.', status: 400 };
     const k = lc(u.name);
     users.delete(k);
+    for (const [p, l] of Object.entries(u.links || {})) idx.delete(p + ':' + l.id);
     retired[k] = now() + RETIRE_MS;
     await Promise.all([store.deleteUser(k), store.saveKV('retired', retired), dropSessions(u)]);
     return { ok: true };
@@ -262,16 +280,57 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
   function profile(name) {
     const u = find(name);
     if (!u) return null;
-    return { ...pub(u), msgs: u.msgs || 0, streak: u.streak && u.streak.n ? u.streak.n : 0 };
+    const verified = {};
+    for (const p of ['twitch', 'kick']) if (u.links && u.links[p] && u.links[p].name) verified[p] = u.links[p].name;
+    return { ...pub(u), msgs: u.msgs || 0, streak: u.streak && u.streak.n ? u.streak.n : 0, verified };
+  }
+
+  /* ---- linked sign-ins ---- */
+  async function link(u, p, ident) {
+    u.links ||= {};
+    if (u.links[p]) idx.delete(p + ':' + u.links[p].id);
+    u.links[p] = { id: ident.id, name: String(ident.handle || ident.name || '').slice(0, 40), at: now() };
+    idx.set(p + ':' + ident.id, lc(u.name));
+    await saveUser(u);
+  }
+  async function unlink(u, p) {
+    if (!u.links || !u.links[p]) return { error: 'That isn’t linked.', status: 400 };
+    if (ways(u) <= 1) return { error: 'That’s your only way to sign in. Set a password or link another account first.', status: 400 };
+    idx.delete(p + ':' + u.links[p].id);
+    delete u.links[p];
+    await saveUser(u);
+    return { ok: true };
+  }
+  function suggestName(raw) {
+    let n = String(raw || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 18);
+    if (n.length < 3) n = 'ater_' + crypto.randomBytes(2).toString('hex');
+    if (!nameProblem(n)) return n;
+    for (let i = 2; i < 200; i++) { const c = n.slice(0, 17) + i; if (!nameProblem(c)) return c; }
+    return 'ater_' + crypto.randomBytes(3).toString('hex');
+  }
+  async function registerLinked(name, p, ident) {
+    name = String(name || '').trim();
+    const np = nameProblem(name);
+    if (np) return { error: np, status: np.includes('taken') || np.includes('recently') ? 409 : 400 };
+    const count = users.size, rc = makeCodes();
+    const u = {
+      name, salt: '', hash: '', roles: (owner ? lc(name) === owner : count === 0) ? ['owner'] : [],
+      color: '', created: now(), og: count < OG_LIMIT, msgs: 0, streak: { last: '', n: 0 }, rc: rc.stored, pwAt: 0, links: {},
+    };
+    users.set(lc(name), u);
+    await link(u, p, ident);
+    return { user: u, codes: rc.codes };
   }
 
   function account(u) {
-    return { ...pub(u), msgs: u.msgs || 0, pwAt: u.pwAt || u.created, codesLeft: (u.rc || []).filter((c) => !c.used).length };
+    const links = Object.fromEntries(Object.entries(u.links || {}).map(([p, l]) => [p, { name: l.name, at: l.at }]));
+    return { ...pub(u), msgs: u.msgs || 0, pwAt: u.pwAt || 0, hasPassword: Boolean(u.hash), links, codesLeft: (u.rc || []).filter((c) => !c.used).length };
   }
 
   return {
     sessionOf, startSession, endSession, register, login, recover, changePassword, newCodes, deleteAccount,
     listSessions, revokeSession, revokeOthers: (u, keep) => dropSessions(u, keep), profile, account, find,
+    findByIdentity, link, unlink, suggestName, registerLinked, ownerCheck,
     save: saveUser, all: () => users.values(),
   };
 }

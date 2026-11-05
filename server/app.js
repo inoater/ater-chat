@@ -12,6 +12,9 @@
  *   POST /api/auth/login                  { name, password }
  *   POST /api/auth/recover                { name, code, password }  reset with a recovery code
  *   POST /api/auth/logout
+ *   GET  /api/auth/oauth/:p/start?mode=login|link   sign in with google | twitch | kick
+ *   GET  /api/auth/oauth/:p/callback      where the provider sends people back
+ *   POST /api/auth/oauth/finish           { t, name }  pick an Ater name for a new linked sign-in
  *
  *   GET  /api/account                     your account
  *   POST /api/account/password            { current, next }
@@ -19,7 +22,8 @@
  *   GET  /api/account/sessions            your signed-in devices
  *   POST /api/account/sessions/revoke     { id }
  *   POST /api/account/sessions/revoke-others
- *   POST /api/account/delete              { password }
+ *   POST /api/account/unlink              { p }
+ *   POST /api/account/delete              { password } (or { confirm: name } for accounts without one)
  *
  *   POST /api/send                        { text, rp? }   messages and /commands
  *   POST /api/vote                        { i }
@@ -45,6 +49,7 @@ const { createChat } = require('./chat');
 const { BUILTIN, SEVEN, checkUpload, check7tv, cdn } = require('./emotes');
 const { createStatic } = require('./static');
 const { setHeaders, sameSite, limiter } = require('./security');
+const { createOAuth, loadProviders } = require('./oauth');
 
 const BODY_LIMIT = 500_000;
 const STREAMS_PER_IP = 20;
@@ -54,13 +59,14 @@ async function createApp({
   mongoUri = '', mongoDb = 'ater', mongoPrefix = '',
   publicDir = path.join(__dirname, '..', 'public'),
   owner = '', trustProxy = false, publicUrl = '', saveDelay,
-  limits = {},
+  limits = {}, oauth: oauthOverrides = {}, env = process.env,
 } = {}) {
   const store = await openStore({ mongoUri, mongoDb, mongoPrefix, dataFile, saveDelay });
   const state = await store.load();
   const accounts = createAccounts(store, state, { owner });
   const chat = createChat(store, state, accounts);
   const serveStatic = createStatic(publicDir);
+  const oauth = createOAuth(loadProviders(env, oauthOverrides), accounts, { publicUrl });
 
   const authLimit = limiter(limits.auth ?? 30, 10 * 60_000);       // sign-in / recovery tries per IP
   const signupLimit = limiter(limits.signups ?? 5, 60 * 60_000);   // new accounts per IP per hour
@@ -87,7 +93,14 @@ async function createApp({
 
     if (req.method === 'GET' || req.method === 'HEAD') {
       if (p === '/healthz') return json(res, 200, { ok: true, db: store.kind, dbOk: await store.ping() });
-      if (p === '/api/me') { const s = await accounts.sessionOf(req); return json(res, 200, { me: pub(s && s.user), server: 'ater', version: 3 }); }
+      if (p === '/api/me') { const s = await accounts.sessionOf(req); return json(res, 200, { me: pub(s && s.user), providers: oauth.list(), server: 'ater', version: 4 }); }
+      const om = p.match(/^\/api\/auth\/oauth\/(google|twitch|kick)\/(start|callback)$/);
+      if (om) {
+        if (om[2] === 'callback') return oauth.callback(req, res, om[1], url);
+        const mode = url.searchParams.get('mode') === 'link' ? 'link' : 'login';
+        const s = mode === 'link' ? await accounts.sessionOf(req) : null;
+        return oauth.start(req, res, om[1], mode, s && s.user);
+      }
       if (p === '/api/stream') {
         const ip = ipOf(req), n = streams.get(ip) || 0;
         if (n >= STREAMS_PER_IP) return json(res, 429, { error: 'Too many open chat windows.' });
@@ -147,6 +160,12 @@ async function createApp({
       return json(res, 200, { me: pub(r.user), left: r.left });
     }
     if (p === '/api/auth/logout') { await accounts.endSession(req, res); return json(res, 200, { ok: true }); }
+    if (p === '/api/auth/oauth/finish') {
+      if (signupLimit(ip)) return json(res, 429, { error: 'Too many new accounts from here. Try again later.' });
+      const r = await oauth.finish(req, res, b.t, b.name);
+      if (r.error) return reply(res, r);
+      return json(res, 200, { me: pub(r.user), codes: r.codes });
+    }
 
     const s = await accounts.sessionOf(req);
     if (!s) return json(res, 401, { error: 'Sign in to chat.' });
@@ -157,8 +176,9 @@ async function createApp({
     if (p === '/api/account/codes') return reply(res, await accounts.newCodes(u, b.password));
     if (p === '/api/account/sessions/revoke') return reply(res, await accounts.revokeSession(u, b.id, s.sid));
     if (p === '/api/account/sessions/revoke-others') { await accounts.revokeOthers(u, s.sid); return json(res, 200, { ok: true }); }
+    if (p === '/api/account/unlink') return reply(res, await accounts.unlink(u, String(b.p || '')));
     if (p === '/api/account/delete') {
-      const r = await accounts.deleteAccount(u, b.password);
+      const r = await accounts.deleteAccount(u, b.password, b.confirm);
       if (r.error) return reply(res, r);
       chat.purge(u.name);
       chat.kick(u.name);
