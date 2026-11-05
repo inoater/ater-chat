@@ -183,6 +183,8 @@ feed.addEventListener('mouseover',e=>{
   const m=e.target.closest('.msg[data-sid]');if(!m||m.querySelector('.ma')||m.classList.contains('del')||!ATER.me)return;
   const bar=h('div','ma');const add=(a,ic,t,cls)=>{const b=h('button',cls||'');b.dataset.a=a;b.title=t;b.setAttribute('aria-label',t);b.append(icon(ic));bar.append(b)};
   add('reply','e-reply','Reply');
+  const own=nm((m.querySelector('.nm')||{}).dataset?.n||'')===nm(ME);
+  if(!own)add('report','i-flag','Report to the moderators');
   if(ATER.me.mod){add('pin','i-pin','Pin for everyone');add('mute','i-mute','Mute for 10 minutes','danger');add('del','i-trash','Delete','danger')}
   m.append(bar);
 });
@@ -195,6 +197,7 @@ feed.addEventListener('click',async e=>{
   if(b.dataset.a==='pin')r=await aterApi('/api/pin',{id:sid});
   if(b.dataset.a==='del')r=await aterApi('/api/del',{id:sid});
   if(b.dataset.a==='mute')r=await aterApi('/api/send',{text:'/mute '+name+' 10m'});
+  if(b.dataset.a==='report'){const why=prompt('Report '+name+'’s message to the moderators. What’s wrong with it? (optional)','');if(why===null)return;r=await aterApi('/api/report',{id:sid,reason:why});if(!r.error)toast('Reported',r.info||'Thanks.')}
   if(r&&r.error)sys(escH(r.error),'sys');
 });
 function sys(html,cls='cmd'){const w=$('#welcome');if(w)w.remove();const d=h('div','msg '+cls);d.innerHTML=html;feed.append(d);if(stick)scr.scrollTop=scr.scrollHeight;return d}
@@ -227,7 +230,8 @@ on('msg',m=>{if(m.bot)return;$('#miniEmpty').hidden=true;mini.append(renderMsg(m
 let PANE='chat';
 function pane(p){
   PANE=p;$$('#cpTabs button').forEach(b=>b.classList.toggle('on',b.dataset.p===p));$('#setBtn').classList.toggle('on',p==='set');$('#srBtn').classList.toggle('on',p==='search');
-  for(const x of['chat','links','board','inbox','search','set','users'])$('#p-'+x).hidden=x!==p;
+  for(const x of['chat','links','board','inbox','search','set','users','mod'])$('#p-'+x).hidden=x!==p;
+  if(p==='mod')renderMod();
   $('#usersBtn').classList.toggle('on',p==='users');
   $('#ucard').hidden=true;
   if(p==='links')renderLinks();if(p==='board')renderBoard();if(p==='inbox')renderInbox();if(p==='set')renderSet();if(p==='users')renderUsers();
@@ -371,6 +375,12 @@ function userCard(p,name){
     }
     setTimeout(()=>c.insertBefore(acts,c.querySelector('.uc-l')),0);
   }
+  if(p==='at')aterApi('/api/user/'+enc(name)).then(pr=>{
+    if(pr.error||c.hidden)return;
+    const line=h('div','uc-p');line.append('Joined '+new Date(pr.created).toLocaleDateString([],{year:'numeric',month:'short',day:'numeric'}),' · '+pr.msgs.toLocaleString()+' messages');
+    if(pr.streak>1)line.append(' · '+pr.streak+'-day streak');if(pr.owner)line.append(' · Broadcaster');else if(pr.mod)line.append(' · Moderator');
+    c.insertBefore(line,c.querySelector('.uc-s'));
+  });
   const st=h('div','uc-s');
   const lb=lbCalc('all','chat',1e6).find(r=>r.p===p&&nm(r.name)===k);
   st.innerHTML='<div><b>'+rows.length+'</b>this session</div><div><b>'+(lb?lb.n.toLocaleString():0)+'</b>all time</div><div><b>'+rows.reduce((a,r)=>a+extract(r.text).length,0)+'</b>links</div>';
@@ -832,23 +842,98 @@ function tick(){
 /* ---- sign in / create account ---- */
 const authM=$('#authM');let authMode='login';
 function openAuth(m){
-  if(aterBase()==null){toast('Ater chat is offline','Start it with node ater-server.js and open http://localhost:8080.',5000);return}
-  setAuthMode(m||'login');$('#authE').textContent='';authM.hidden=false;setTimeout(()=>$('#authN').focus(),30);
+  if(aterBase()==null){toast('Ater chat is offline','Start the server with npm start and open http://localhost:8080.',5000);return}
+  setAuthMode(m||'login');$('#authE').textContent='';$('#authP').value='';$('#authC').value='';authM.hidden=false;setTimeout(()=>$('#authN').focus(),30);
 }
-function setAuthMode(m){authMode=m;$$('#authSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));$('#authB').textContent=m==='login'?'Sign in':'Create account';$('#authT').textContent=m==='login'?'Sign in to Ater chat':'Join Ater chat';$('#authP').autocomplete=m==='login'?'current-password':'new-password';$('#authH').textContent=m==='login'?'Ater accounts live on this site only. They’re separate from Twitch, Kick and YouTube.':'Pick a name (3–20 letters, numbers or _) and a password of 8+ characters. Your chats get the Ater badge.'}
+const AUTH_TEXT={
+  login:['Sign in to Ater chat','Sign in','Password','current-password','Ater accounts live on this site only. They’re separate from Twitch, Kick and YouTube.'],
+  register:['Join Ater chat','Create account','Password','new-password','Pick a name (3–20 letters, numbers or _) and a password. You’ll get recovery codes in case you ever forget it.'],
+  recover:['Reset your password','Reset password','New password','new-password','Use one of the recovery codes you saved when you made your account. Each code works once, and resetting signs out your other devices.']
+};
+function setAuthMode(m){
+  authMode=m;const t=AUTH_TEXT[m];
+  $$('#authSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  $('#authT').textContent=t[0];$('#authB').textContent=t[1];$('#authPL').textContent=t[2];$('#authP').autocomplete=t[3];$('#authH').textContent=t[4];
+  $('#authCodeL').hidden=m!=='recover';$('#authC').required=m==='recover';
+  $('#authForgot').textContent=m==='recover'?'Back to sign in':'Forgot your password?';$('#authForgot').hidden=m==='register';
+  $('#authMeter').hidden=m==='login';meter();
+}
+/* rough strength meter: length and variety, minus obvious patterns (the server has the final say) */
+function pwScore(pw,name){
+  if(!pw)return 0;let s=Math.min(pw.length,20)*4;
+  for(const re of[/[a-z]/,/[A-Z]/,/\d/,/[^\w]/,/\s/])if(re.test(pw))s+=8;
+  if(/^(.)\1+$/.test(pw)||/^(password|qwerty|123456|letmein)/i.test(pw))s=10;
+  if(name&&pw.toLowerCase().includes(name.toLowerCase()))s=Math.min(s,20);
+  return Math.min(100,s);
+}
+function meter(){
+  const el=$('#authMeter');if(el.hidden)return;const v=$('#authP').value,sc=pwScore(v,$('#authN').value.trim());
+  const [c,l]=!v?['var(--line)','']:v.length<8?['var(--bad)','Too short']:sc<50?['var(--warn)','Okay']:sc<75?['#9be37a','Good']:['var(--ok)','Strong'];
+  el.style.setProperty('--w',(v?Math.max(8,sc):0)+'%');el.style.setProperty('--c',c);el.querySelector('span').textContent=l;
+}
+$('#authP').addEventListener('input',meter);$('#authN').addEventListener('input',meter);
 $$('#authSeg button').forEach(b=>b.onclick=()=>setAuthMode(b.dataset.m));
+$('#authForgot').onclick=()=>setAuthMode(authMode==='recover'?'login':'recover');
 $('#authX').onclick=()=>authM.hidden=true;authM.onclick=e=>{if(e.target===authM)authM.hidden=true};
 $('#authF').onsubmit=async e=>{
   e.preventDefault();const b=$('#authB');b.disabled=true;$('#authE').textContent='';
-  const r=await aterApi(authMode==='login'?'/api/auth/login':'/api/auth/register',{name:$('#authN').value.trim(),password:$('#authP').value});
+  const name=$('#authN').value.trim(),password=$('#authP').value;
+  const r=authMode==='login'?await aterApi('/api/auth/login',{name,password})
+    :authMode==='register'?await aterApi('/api/auth/register',{name,password,website:$('#authW').value})
+    :await aterApi('/api/auth/recover',{name,code:$('#authC').value,password});
   b.disabled=false;
   if(r.error){$('#authE').textContent=r.error;return}
-  $('#authP').value='';authM.hidden=true;
+  $('#authP').value='';$('#authC').value='';authM.hidden=true;
   ATER.me=r.me;ME=r.me.name;mkAR();syncAuth();aterStart();
-  toast(authMode==='login'?'Welcome back, '+ME:'Welcome to Ater, '+ME,r.me.owner?'You’re the broadcaster here.':'Say hi in chat.');
+  if(authMode==='register'&&r.codes)showCodes(r.codes,()=>toast('Welcome to Ater, '+ME,r.me.owner?'You’re the broadcaster here.':'Say hi in chat.'));
+  else if(authMode==='recover')toast('Password reset',r.left+' recovery code'+(r.left===1?'':'s')+' left.'+(r.left<3?' Make new ones in Account & security.':''),6000);
+  else toast('Welcome back, '+ME,r.me.owner?'You’re the broadcaster here.':'');
   if(VIEW()==='home')go('#/bigscreen');setTimeout(()=>cpIn.focus(),80);
 };
 async function signOut(){await aterApi('/api/auth/logout',{});ATER.me=null;ME=null;mkAR();$('#meMenu').hidden=true;syncAuth();aterStart();toast('Signed out','')}
+
+/* ---- recovery codes: shown once ---- */
+const codesM=$('#codesM');let codesThen=null;
+function showCodes(codes,then){
+  codesThen=then||null;const L=$('#codesL');L.replaceChildren(...codes.map(c=>h('span',null,c)));L.dataset.txt=codes.join('\n');
+  $('#codesOk').checked=false;$('#codesDone').disabled=true;codesM.hidden=false;
+}
+$('#codesOk').onchange=()=>$('#codesDone').disabled=!$('#codesOk').checked;
+$('#codesCopy').onclick=()=>copy($('#codesL').dataset.txt).then(ok=>toast(ok?'Copied':'Couldn’t copy',ok?'Paste them somewhere safe.':'Select the codes and copy them by hand.'));
+$('#codesDl').onclick=()=>dl('ater-recovery-codes-'+(ME||'account')+'.txt','Ater recovery codes for '+(ME||'')+'\n'+location.origin+'\nEach code works once.\n\n'+$('#codesL').dataset.txt+'\n','text/plain');
+$('#codesDone').onclick=()=>{codesM.hidden=true;$('#codesL').replaceChildren();delete $('#codesL').dataset.txt;if(codesThen)codesThen();codesThen=null};
+
+/* ---- account & security ---- */
+const acctM=$('#acctM');
+const acErr=t=>{$('#acE').textContent=t||''};
+async function openAccount(){
+  if(!ATER.me)return openAuth('login');
+  meMenu.hidden=true;acErr('');acctM.hidden=false;$('#pwU').value=ME;
+  const a=await aterApi('/api/account');if(a.error)return acErr(a.error);
+  const av=$('#acAv');av.textContent=a.name[0];av.style.background=a.color||colorFor(a.name);
+  $('#acSum').replaceChildren(...[a.owner?'Broadcaster':a.mod?'Moderator':'Ater chatter','Joined '+new Date(a.created).toLocaleDateString([],{year:'numeric',month:'short',day:'numeric'}),a.msgs.toLocaleString()+' messages','Password changed '+ago(a.pwAt)].map(t=>h('span','pill',t)));
+  $('#rcH').textContent=a.codesLeft?a.codesLeft+' of 8 recovery codes left. Making new ones replaces all of them.':'You have no recovery codes left. Make new ones so a forgotten password isn’t the end of this account.';
+  renderDevices();
+}
+async function renderDevices(){
+  const L=$('#devL');const r=await aterApi('/api/account/sessions');if(r.error)return acErr(r.error);
+  L.replaceChildren(...r.sessions.map(s=>{const li=h('li'),t=h('div');t.append(h('b',null,s.device),h('small',null,'Signed in '+ago(s.created)+' · active '+ago(s.lastSeen)));li.append(t,h('span','sp'));
+    if(s.current)li.append(h('span','here','This device'));else{const b=h('button','btn btn-o btn-sm','Sign out');b.onclick=async()=>{const q=await aterApi('/api/account/sessions/revoke',{id:s.id});if(q.error)return acErr(q.error);renderDevices()};li.append(b)}
+    return li}));
+  $('#devOthers').disabled=r.sessions.length<2;
+}
+$('#acctX').onclick=()=>acctM.hidden=true;acctM.onclick=e=>{if(e.target===acctM)acctM.hidden=true};
+$('#mmAcct').onclick=openAccount;
+$('#devOthers').onclick=async()=>{const r=await aterApi('/api/account/sessions/revoke-others',{});if(r.error)return acErr(r.error);toast('Signed out everywhere else','');renderDevices()};
+$('#pwF').onsubmit=async e=>{e.preventDefault();acErr('');const r=await aterApi('/api/account/password',{current:$('#pwCur').value,next:$('#pwNew').value});if(r.error)return acErr(r.error);$('#pwCur').value=$('#pwNew').value='';toast('Password changed',r.info||'');openAccount()};
+$('#rcF').onsubmit=async e=>{e.preventDefault();acErr('');const r=await aterApi('/api/account/codes',{password:$('#rcP').value});if(r.error)return acErr(r.error);$('#rcP').value='';acctM.hidden=true;showCodes(r.codes,openAccount)};
+$('#delF').onsubmit=async e=>{
+  e.preventDefault();acErr('');
+  if($('#delN').value.trim().toLowerCase()!==String(ME).toLowerCase())return acErr('Type your name exactly to confirm.');
+  if(!confirm('Delete '+ME+' for good? This can’t be undone.'))return;
+  const r=await aterApi('/api/account/delete',{password:$('#delP').value});if(r.error)return acErr(r.error);
+  acctM.hidden=true;ATER.me=null;ME=null;mkAR();syncAuth();aterStart();toast('Account deleted','Thanks for hanging out.');
+};
 $('#signBtn').onclick=()=>openAuth('login');
 
 /* ---- account chip + menu ---- */
@@ -937,8 +1022,54 @@ async function setPlatform(p,v){
   if(PANE==='set')renderSet();
 }
 
+/* ---- moderators: reports, mod log, blocked words ---- */
+let MODK='reports';
+segInit('modSeg','k','reports',v=>{MODK=v;renderMod()});
+$('#modRefresh').onclick=()=>renderMod();
+function syncMod(){
+  const mod=!!(ATER.me&&ATER.me.mod),n=ATER.reports||0;
+  $('#modTab').hidden=!mod;const c=$('#modN');c.hidden=!mod||!n;c.textContent=n>99?'99+':n;
+  if(!mod&&PANE==='mod')pane('chat');
+}
+const ACT={mute:'muted',unmute:'unmuted',ban:'banned',unban:'unbanned',purge:'purged',clear:'cleared chat',slow:'slow mode',pin:'pinned',unpin:'unpinned',delete:'deleted',poll:'started a poll',mod:'made mod',unmod:'removed mod','filter:add':'blocked words','filter:remove':'unblocked words','emote:add':'added emote','emote:remove':'removed emote','report:dismiss':'dismissed report','report:delete':'deleted (report)','report:mute':'muted (report)','report:ban':'banned (report)'};
+function logRow(e){const d=h('div','lg');d.append(h('span','ts',clock(e.ts)));const b=h('b',null,e.by);b.style.color=colorFor(e.by);d.append(b,h('span','act',ACT[e.act]||e.act));if(e.target)d.append(h('b',null,e.target));d.append(h('span','d',e.detail||''));return d}
+async function renderMod(){
+  if(PANE!=='mod')return;const L=$('#modL');
+  if(MODK==='reports'){
+    const r=await aterApi('/api/mod/reports');L.replaceChildren();if(r.error)return L.append(h('div','empty',r.error));
+    ATER.reports=r.reports.length;syncMod();
+    if(!r.reports.length)return L.append(h('div','empty','No open reports. Anyone can report a message by hovering it and pressing the flag.'));
+    for(const x of r.reports){
+      const c=h('div','rep'),hd=h('div','h');const who=h('b',null,x.msg.name);who.style.color=colorFor(x.msg.name);
+      hd.append(who,'· reported by '+x.by+' · '+ago(x.ts));c.append(hd);
+      const q=h('div','q');for(const t of aterTokens(x.msg.text)){if(typeof t==='string')linkify(q,t);else q.append(emoteEl(t))}c.append(q);
+      if(x.reason)c.append(h('div','hint','“'+x.reason+'”'));
+      const a=h('div','a');
+      for(const[act,label,cls]of[['delete','Delete message','btn-o'],['mute','Mute 10m','btn-o'],['ban','Ban','btn-o danger'],['dismiss','Dismiss','']]){
+        const b=h('button','btn btn-sm '+cls,label);b.onclick=async()=>{if(act==='ban'&&!confirm('Ban '+x.msg.name+'?'))return;const q2=await aterApi('/api/mod/reports/resolve',{id:x.id,action:act});if(q2.error)return toast('Didn’t work',q2.error);renderMod()};a.append(b);
+      }
+      c.append(a);L.append(c);
+    }
+  }else if(MODK==='log'){
+    const r=await aterApi('/api/mod/log');L.replaceChildren();if(r.error)return L.append(h('div','empty',r.error));
+    if(!r.log.length)return L.append(h('div','empty','Nothing yet. Every mute, ban, delete, pin and poll shows up here.'));
+    for(const e of r.log)L.append(logRow(e));
+  }else{
+    L.replaceChildren();
+    const f=h('form','ac-f');const i=h('input');i.placeholder='Add words (space-separated)';const b=h('button','btn btn-p btn-sm','Block');b.type='submit';f.append(i,b);
+    f.onsubmit=async e=>{e.preventDefault();if(!i.value.trim())return;const r=await aterApi('/api/send',{text:'/filter add '+i.value.trim()});if(r.error)return toast('Didn’t work',r.error);i.value='';renderMod()};
+    L.append(f,h('p','hint','Messages containing these whole words are refused. Moderators are exempt.'));
+    const r=await aterApi('/api/send',{text:'/filter list'});const words=((r.info||'').match(/^Blocked words: (.*)$/)||[,''])[1].split(', ').filter(Boolean);
+    const w=h('div','words');for(const x of words){const s=h('span',null,x),rm=h('button',null,'✕');rm.title='Unblock';rm.onclick=async()=>{await aterApi('/api/send',{text:'/filter remove '+x});renderMod()};s.append(rm);w.append(s)}
+    L.append(words.length?w:h('div','empty','No blocked words yet.'));
+  }
+}
+on('modlog',e=>{if(PANE==='mod'&&MODK==='log'){const L=$('#modL');const em=L.querySelector('.empty');if(em)em.remove();L.prepend(logRow(e))}});
+
 on('ater',k=>{
-  syncAuth();syncStatus();renderUsers();
+  syncAuth();syncStatus();renderUsers();syncMod();
+  if(k==='modqueue'&&PANE==='mod'&&MODK==='reports')renderMod();
+  if(k==='me')toast(ATER.me&&ATER.me.mod?'You’re a moderator now':'Your role changed',ATER.me&&ATER.me.mod?'The Mod tab has reports and the mod log.':'');
   if(k==='hello'||k==='pins'||k==='poll')renderTop();
   if(k==='emotes'&&!emoPick.hidden)renderEmo();
   if(k==='hello'||k==='settings'||k==='emotes'){if(PANE==='set')renderSet()}
@@ -1002,7 +1133,7 @@ $('#palBtn').onclick=()=>setPal(true);
    ===================================================================== */
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setPal(pal.hidden);return}
-  if(e.key==='Escape'){if(!pal.hidden)return setPal(false);if(!authM.hidden)return authM.hidden=true;if(!pollM.hidden)return pollM.hidden=true;if(!meMenu.hidden)return meMenu.hidden=true;if(REPLY)return setReply(null);if(!sheet.hidden)return setSheet(false);if(!addPop.hidden)return setAdd(false);if(!emoPick.hidden)return emoPick.hidden=true;if(!$('#ucard').hidden)return $('#ucard').hidden=true;if(document.body.classList.contains('theater'))return setTheater(false);if(PANE!=='chat'&&VIEW()!=='home')return pane('chat')}
+  if(e.key==='Escape'){if(!pal.hidden)return setPal(false);if(!authM.hidden)return authM.hidden=true;if(!acctM.hidden)return acctM.hidden=true;if(!pollM.hidden)return pollM.hidden=true;if(!meMenu.hidden)return meMenu.hidden=true;if(REPLY)return setReply(null);if(!sheet.hidden)return setSheet(false);if(!addPop.hidden)return setAdd(false);if(!emoPick.hidden)return emoPick.hidden=true;if(!$('#ucard').hidden)return $('#ucard').hidden=true;if(document.body.classList.contains('theater'))return setTheater(false);if(PANE!=='chat'&&VIEW()!=='home')return pane('chat')}
   if(isTyping(e)||e.ctrlKey||e.metaKey||e.altKey)return;
   const k=e.key.toLowerCase();
   if(k==='n'){e.preventDefault();openNext()}

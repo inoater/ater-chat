@@ -237,6 +237,14 @@ function relayBase(raw){
   if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(u))u='https://'+u;
   return u.replace(/^ws(s?):/i,'http$1:').replace(/\/+$/,'');
 }
+/* channel lookup: through the relay if it forwards it, else kick.com directly (often blocked from other sites), else the configured chatroom ID */
+async function kickChannel(slug,rl){
+  for(const base of[rl,'https://kick.com'].filter(Boolean)){
+    try{const r=await fetch(base+'/api/v2/channels/'+encodeURIComponent(slug));if(!r.ok)continue;const j=await r.json();if(j&&j.chatroom&&j.chatroom.id)return j}catch{}
+  }
+  if(CONFIG.kickChatroom&&slug===String(CONFIG.channels.kick||'').toLowerCase())return{chatroom:{id:CONFIG.kickChatroom}};
+  throw new Error('lookup failed');
+}
 const kickChannels=(id,ch)=>['chatrooms.'+id+'.v2','chatroom_'+id].concat(ch?['channel_'+ch]:[]);
 function Kick(){
   let ws,stop=true,retry=0,id,gen=0,tm,dog,rt,rl='';
@@ -307,7 +315,7 @@ function Kick(){
     kickUid='';kickCh='';kickSub=[];
     if(!id){
       status('kk','wait','looking up…');
-      try{const r=await fetch((rl||'https://kick.com')+'/api/v2/channels/'+encodeURIComponent(slug));const j=await r.json();id=j.chatroom.id;kickSub=(j.subscriber_badges||[]).filter(b=>b&&b.badge_image&&b.badge_image.src).sort((a,b)=>a.months-b.months);kickUid=String(j.user_id||(j.user&&j.user.id)||'');kickCh=String(j.id||'')}catch{}
+      try{const j=await kickChannel(slug,rl);id=j.chatroom.id;kickSub=(j.subscriber_badges||[]).filter(b=>b&&b.badge_image&&b.badge_image.src).sort((a,b)=>a.months-b.months);kickUid=String(j.user_id||(j.user&&j.user.id)||'');kickCh=String(j.id||'')}catch{}
       if(!id){stop=true;status('kk','err','add the chatroom ID');return false}
     }
     CHAN.kk=slug||'chatroom-'+id;
@@ -409,6 +417,9 @@ function aterStart(){
   L('settings',d=>{ATER.settings=d||{};emit('ater','settings')});
   L('notice',d=>emit('aternotice',d));
   L('whisper',d=>emit('whisper',d));
+  L('me',d=>{ATER.me=d.me;ME=d.me&&d.me.name;mkAR();emit('ater','me')});
+  L('modqueue',d=>{ATER.reports=d.reports||0;emit('ater','modqueue')});
+  L('modlog',d=>emit('modlog',d));
   es.onerror=()=>{const dead=es.readyState===2;if(ATER.up||dead){ATER.up=false;status('at',dead?'err':'wait',dead?'offline':'reconnecting…');emit('ater','down')}};
 }
 on('whisper',d=>{if(ME&&nm(d.from)===nm(ME))return;INBOX.push({id:d.ts+'-w',p:'at',name:d.from,text:d.text,ts:d.ts,r:false,w:true});ibSave();toast('Whisper from '+d.from,d.text);ping()});

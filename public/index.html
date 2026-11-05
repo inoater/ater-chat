@@ -66,6 +66,8 @@
 <symbol id="i-mute" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/></g></symbol>
 <symbol id="i-poll" viewBox="0 0 24 24"><path d="M5 20V12M10 20V5M15 20v-9M20 20v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
 <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14M10 8l-4 4 4 4M6 12h10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4m0 0h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="i-xs" viewBox="0 0 24 24"><path fill="currentColor" d="M17.8 3h3.1l-6.7 7.7L22 21h-6.2l-4.8-6.3L5.5 21H2.4l7.2-8.2L2 3h6.3l4.4 5.8zm-1.1 16.2h1.7L7.4 4.7H5.6z"/></symbol>
 <symbol id="i-dc" viewBox="0 0 24 24"><path fill="currentColor" d="M19.6 5.3A17 17 0 0 0 15.4 4l-.5 1.1a15.6 15.6 0 0 0-5.8 0L8.6 4a17 17 0 0 0-4.2 1.3C1.7 9.3 1 13.2 1.3 17a17 17 0 0 0 5.2 2.6l1.1-1.8c-.6-.2-1.2-.5-1.7-.9l.4-.3a12.2 12.2 0 0 0 10.4 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.8a17 17 0 0 0 5.2-2.6c.4-4.4-.7-8.3-2.1-11.7zM8.7 14.7c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1zm6.6 0c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z"/></symbol>
 </g>
@@ -221,6 +223,7 @@
       <button data-p="links" role="tab">Links<span class="cnt dim" id="lkN">0</span></button>
       <button data-p="board" role="tab">Top chatters</button>
       <button data-p="inbox" role="tab">Mentions<span class="cnt" id="ibN" hidden>0</span></button>
+      <button data-p="mod" role="tab" id="modTab" hidden><svg class="i"><use href="#i-shield"/></svg>Mod<span class="cnt" id="modN" hidden>0</span></button>
     </div>
     <div class="cp-body">
       <div class="pane" id="p-chat">
@@ -246,6 +249,10 @@
         <div class="scroll" id="srL"></div>
       </div>
       <div class="pane" id="p-users" hidden><div class="scroll"><div class="ul" id="ulist"></div></div></div>
+      <div class="pane" id="p-mod" hidden>
+        <div class="pane-tools"><div class="seg" id="modSeg"><button data-k="reports" class="on">Reports</button><button data-k="log">Mod log</button><button data-k="words">Blocked words</button></div><span style="flex:1"></span><button class="ic" id="modRefresh" title="Refresh" aria-label="Refresh"><svg><use href="#i-swap"/></svg></button></div>
+        <div class="scroll"><div class="modl" id="modL"></div></div>
+      </div>
       <div class="pane" id="p-set" hidden><div class="scroll"><div class="set" id="set"></div></div></div>
       <div class="ucard" id="ucard" hidden></div>
     </div>
@@ -277,6 +284,7 @@
   <div class="mm-h"><span class="av" id="mmAv"></span><div><b id="mmName"></b><small id="mmRole"></small></div></div>
   <h4>Name colour</h4>
   <div class="sw8" id="mmSw"></div>
+  <button class="btn btn-o btn-sm" id="mmAcct" style="width:100%"><svg class="i"><use href="#i-shield"/></svg>Account &amp; security</button>
   <div class="mm-a"><button class="btn btn-o btn-sm" id="mmSet"><svg class="i"><use href="#i-gear"/></svg>Chat settings</button><button class="btn btn-o btn-sm" id="mmOut"><svg class="i"><use href="#i-out"/></svg>Sign out</button></div>
 </div>
 
@@ -287,11 +295,62 @@
     <div class="seg" id="authSeg"><button data-m="login" class="on" type="button">Sign in</button><button data-m="register" type="button">Create account</button></div>
     <form id="authF">
       <label>Name<input id="authN" autocomplete="username" maxlength="20" spellcheck="false" autocapitalize="off" required></label>
-      <label>Password<input id="authP" type="password" autocomplete="current-password" minlength="8" required></label>
+      <label id="authCodeL" hidden>Recovery code<input id="authC" autocomplete="one-time-code" maxlength="12" spellcheck="false" autocapitalize="off" placeholder="xxxx-xxxx"></label>
+      <label><span id="authPL">Password</span><input id="authP" type="password" autocomplete="current-password" minlength="8" maxlength="200" required></label>
+      <div class="pwm" id="authMeter" hidden><i></i><span></span></div>
+      <!-- only bots fill this in -->
+      <label class="hp" aria-hidden="true">Website<input id="authW" name="website" tabindex="-1" autocomplete="off"></label>
       <div class="err" id="authE" role="alert"></div>
       <button class="btn btn-p" type="submit" id="authB">Sign in</button>
+      <button class="linkb" type="button" id="authForgot">Forgot your password?</button>
       <p class="hint" id="authH">Ater accounts live on this site only. They’re separate from Twitch, Kick and YouTube.</p>
     </form>
+  </div>
+</div>
+
+<!-- recovery codes, shown once -->
+<div class="scrim" id="codesM" hidden>
+  <div class="modal" role="dialog" aria-labelledby="codesT">
+    <div class="mh"><svg class="i"><use href="#i-shield"/></svg><h3 id="codesT">Save your recovery codes</h3></div>
+    <p class="hint">If you ever forget your password, one of these gets you back in. Each code works once. <b>This is the only time you’ll see them</b>, so put them somewhere safe, like a password manager.</p>
+    <div class="codes" id="codesL"></div>
+    <div class="row2"><button class="btn btn-o btn-sm" type="button" id="codesCopy"><svg class="i"><use href="#i-copy"/></svg>Copy</button><button class="btn btn-o btn-sm" type="button" id="codesDl"><svg class="i"><use href="#i-dl"/></svg>Download .txt</button></div>
+    <label class="sw-row ck"><input type="checkbox" id="codesOk"><span>I’ve saved them somewhere safe</span></label>
+    <button class="btn btn-p" type="button" id="codesDone" disabled>Done</button>
+  </div>
+</div>
+
+<!-- account & security -->
+<div class="scrim" id="acctM" hidden>
+  <div class="modal wide" role="dialog" aria-labelledby="acctT">
+    <div class="mh"><span class="av" id="acAv"></span><h3 id="acctT">Account &amp; security</h3><button class="ic" id="acctX" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+    <div class="ac-sum" id="acSum"></div>
+    <section class="acs">
+      <h4>Password</h4>
+      <form id="pwF" class="ac-f">
+        <input type="text" autocomplete="username" id="pwU" hidden>
+        <input id="pwCur" type="password" autocomplete="current-password" placeholder="Current password" required>
+        <input id="pwNew" type="password" autocomplete="new-password" placeholder="New password (8+ characters)" minlength="8" required>
+        <button class="btn btn-p btn-sm" type="submit">Change password</button>
+      </form>
+      <p class="hint" id="pwH">Changing it signs out your other devices.</p>
+    </section>
+    <section class="acs">
+      <h4>Recovery codes</h4>
+      <p class="hint" id="rcH"></p>
+      <form id="rcF" class="ac-f"><input id="rcP" type="password" autocomplete="current-password" placeholder="Your password" required><button class="btn btn-o btn-sm" type="submit">Make new codes</button></form>
+    </section>
+    <section class="acs">
+      <h4>Signed-in devices</h4>
+      <ul class="devs" id="devL"></ul>
+      <button class="btn btn-o btn-sm" type="button" id="devOthers">Sign out all other devices</button>
+    </section>
+    <section class="acs danger">
+      <h4>Delete account</h4>
+      <p class="hint">Removes your account and your messages. Your name is held for 30 days so nobody can pretend to be you.</p>
+      <form id="delF" class="ac-f"><input id="delN" placeholder="Type your name to confirm" autocomplete="off" required><input id="delP" type="password" autocomplete="current-password" placeholder="Your password" required><button class="btn btn-sm danger" type="submit">Delete my account</button></form>
+    </section>
+    <div class="err" id="acE" role="alert"></div>
   </div>
 </div>
 
