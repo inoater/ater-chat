@@ -14,8 +14,9 @@ const TYPES = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp',
   '.txt': 'text/plain; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
-const COMPRESS = new Set(['.html', '.css', '.js', '.json', '.svg', '.txt']);
+const COMPRESS = new Set(['.html', '.css', '.js', '.json', '.svg', '.txt', '.webmanifest']);
 
 function createStatic(root) {
   root = path.resolve(root);
