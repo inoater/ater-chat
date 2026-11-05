@@ -1,0 +1,8 @@
+.git
+.github
+data
+docs
+test
+kick-relay
+.env
+*.md
