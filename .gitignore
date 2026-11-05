@@ -1,0 +1,14 @@
+# chat data: accounts, sessions, history (never commit this)
+data/
+ater-data.json
+*.tmp
+
+# local settings
+.env
+
+# tooling
+node_modules/
+.wrangler/
+.DS_Store
+Thumbs.db
+*.log
