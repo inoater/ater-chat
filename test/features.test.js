@@ -16,7 +16,7 @@ describe('the Ater pick', () => {
 
   test('moderators set it, everyone hears about it, new arrivals get it', async () => {
     assert.equal((await fan.call('/api/feature', { p: 'twitch', u: 'someone' })).status, 403);
-    assert.match((await fan.say('/feature someone')).error, /moderators/i);
+    assert.match((await fan.say('/feature someone')).error, /can’t set the Ater pick/);
     assert.equal((await host.call('/api/feature', { p: 'kick', u: 'CoStreamer', note: 'watch party' })).ok, true);
     const f = await live.next('featured', (x) => x && x.u === 'costreamer');
     assert.equal(f.data.p, 'kick');

@@ -64,7 +64,7 @@ function emoteList(db) {
   const out = Object.keys(BUILTIN).map((name) => ({ name, url: '/api/emote/' + name, set: 'ater', b: 1 }));
   for (const [name, e] of SEVEN) if (!db.emotes[name]) out.push({ name, url: cdn(e.id), set: '7tv', w: e.w, b: 1 });
   for (const [name, e] of Object.entries(db.emotes)) {
-    out.push(e.type === '7tv' ? { name, url: cdn(e.id), set: '7tv', by: e.by } : { name, url: `/api/emote/${name}?v=${e.ts}`, set: 'ater', by: e.by });
+    out.push(e.type === '7tv' ? { name, url: cdn(e.id), set: '7tv', by: e.by } : { name, url: `/api/emote/${name}?v=${e.ts}`, set: 'ater', by: e.by, w: e.w && e.h ? Math.round((28 * e.w) / e.h) : undefined });
   }
   return out;
 }

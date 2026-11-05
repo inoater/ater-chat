@@ -105,8 +105,8 @@ describe('chat', () => {
 
   test('mute stops someone chatting', async () => {
     assert.equal((await owner.say('/mute fan 5m')).ok, true);
-    await live.next('notice', (n) => /fan was muted/.test(n.text));
-    assert.match((await viewer.say('can I talk?')).error, /muted/);
+    await live.next('notice', (n) => /fan was timed out/.test(n.text));
+    assert.match((await viewer.say('can I talk?')).error, /timed out/);
     assert.equal((await owner.say('/unmute fan')).ok, true);
     assert.equal((await viewer.say('thanks')).ok, true);
   });
@@ -135,14 +135,16 @@ describe('chat', () => {
   });
 
   test('the broadcaster can make moderators', async () => {
-    assert.match((await viewer.say('/mod fan')).error, /broadcaster/);
+    assert.match((await viewer.say('/mod fan')).error, /admin/);
     assert.equal((await owner.say('/mod fan')).ok, true);
     await new Promise((r) => setTimeout(r, 600));
     assert.equal((await viewer.say('/slow off')).ok, true);
   });
 
   test('emote uploads: images only, unique names', async () => {
-    const png = 'data:image/png;base64,' + Buffer.from('fake png bytes').toString('base64');
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const fakePng = 'data:image/png;base64,' + Buffer.from('not really a png at all').toString('base64');
+    assert.equal((await owner.call('/api/emote', { name: 'FakeOne', data: fakePng })).status, 400, 'checks the real file type');
     assert.equal((await owner.call('/api/emote', { name: 'MyEmote', data: png })).ok, true);
     assert.equal((await owner.call('/api/emote', { name: 'MyEmote', data: png })).status, 400);
     assert.equal((await owner.call('/api/emote', { name: 'AterW', data: png })).status, 400);

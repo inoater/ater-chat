@@ -42,15 +42,27 @@ const hashPw = async (pw, salt) => (await scrypt(pw, salt, 64)).toString('hex');
 const isOwner = (u) => Boolean(u && (u.roles || []).includes('owner'));
 const isMod = (u) => Boolean(u && ((u.roles || []).includes('mod') || isOwner(u)));
 
+/* the role registry (server/roles.js), set once at start-up */
+let ROLES = null;
+const useRoles = (r) => { ROLES = r; };
+
 function badges(u) {
   const b = [];
   if (isOwner(u)) b.push('owner');
   else if (isMod(u)) b.push('mod');
+  if (ROLES) for (const id of ROLES.badgeRoles(u)) b.push('role:' + id);
   if (u.og) b.push('og');
   if (u.streak && u.streak.n >= 3 && u.streak.last >= dayUTC(now() - 864e5)) b.push('streak:' + u.streak.n);
   return b;
 }
-const pub = (u) => (u ? { name: u.name, color: u.color || '', b: badges(u), mod: isMod(u), owner: isOwner(u), created: u.created } : null);
+const avatarUrl = (u) => (u.av ? `/api/media/av-${u.name.toLowerCase()}?v=${u.av.ts}` : null);
+/** What other people (and the browser) get to see about an account. */
+const pub = (u) => (u ? {
+  name: u.name, color: u.color || '', b: badges(u), mod: isMod(u), owner: isOwner(u), created: u.created,
+  r: ROLES ? ROLES.displayRole(u) : '', roles: (u.roles || []).slice(), av: avatarUrl(u), acc: u.accent || '',
+  staff: ROLES ? ROLES.staff(u) : isMod(u),
+} : null);
+const HEX = /^#[0-9a-f]{6}$/i;
 const PROVIDER_NAMES = { google: 'Google', twitch: 'Twitch', kick: 'Kick' };
 
 function parseCookies(header) {
@@ -260,7 +272,7 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
     users.delete(k);
     for (const [p, l] of Object.entries(u.links || {})) idx.delete(p + ':' + l.id);
     retired[k] = now() + RETIRE_MS;
-    await Promise.all([store.deleteUser(k), store.saveKV('retired', retired), dropSessions(u)]);
+    await Promise.all([store.deleteUser(k), store.saveKV('retired', retired), dropSessions(u), u.av ? store.deleteMedia('av-' + k) : null]);
     return { ok: true };
   }
 
@@ -282,7 +294,35 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
     if (!u) return null;
     const verified = {};
     for (const p of ['twitch', 'kick']) if (u.links && u.links[p] && u.links[p].name) verified[p] = u.links[p].name;
-    return { ...pub(u), msgs: u.msgs || 0, streak: u.streak && u.streak.n ? u.streak.n : 0, verified };
+    return { ...pub(u), msgs: u.msgs || 0, streak: u.streak && u.streak.n ? u.streak.n : 0, verified, bio: u.bio || '', pronouns: u.pronouns || '' };
+  }
+
+  /* ---- profile: name colour, accent, bio, pronouns, picture ---- */
+  async function updateProfile(u, p) {
+    if (p.color !== undefined) { if (p.color && !HEX.test(p.color)) return { error: 'Name colour must be a hex colour like #a855f7.', status: 400 }; u.color = (p.color || '').toLowerCase(); }
+    if (p.accent !== undefined) { if (p.accent && !HEX.test(p.accent)) return { error: 'Accent must be a hex colour.', status: 400 }; u.accent = (p.accent || '').toLowerCase(); }
+    if (p.bio !== undefined) u.bio = String(p.bio || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '').trim().slice(0, 190);
+    if (p.pronouns !== undefined) u.pronouns = String(p.pronouns || '').replace(/[^\p{L}\p{N} /.-]/gu, '').trim().slice(0, 20);
+    if (p.dmFrom !== undefined) u.dmFrom = ['everyone', 'staff', 'nobody'].includes(p.dmFrom) ? p.dmFrom : 'everyone';
+    await saveUser(u);
+    return { ok: true, profile: profile(u.name) };
+  }
+  async function setAvatar(u, img) {
+    const key = 'av-' + lc(u.name);
+    if (!img) { delete u.av; await Promise.all([store.deleteMedia(key), saveUser(u)]); return { ok: true }; }
+    const ts = now();
+    await store.saveMedia(key, { type: img.type, data: img.data, ts });
+    u.av = { ts };
+    await saveUser(u);
+    return { ok: true, av: avatarUrl(u) };
+  }
+  async function block(u, name, on) {
+    const k = lc(name);
+    if (!users.has(k) || k === lc(u.name)) return { error: 'No one to block there.', status: 400 };
+    u.blocks = (u.blocks || []).filter((x) => x !== k);
+    if (on) u.blocks.push(k);
+    await saveUser(u);
+    return { ok: true, blocks: u.blocks };
   }
 
   /* ---- linked sign-ins ---- */
@@ -324,15 +364,19 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
 
   function account(u) {
     const links = Object.fromEntries(Object.entries(u.links || {}).map(([p, l]) => [p, { name: l.name, at: l.at }]));
-    return { ...pub(u), msgs: u.msgs || 0, pwAt: u.pwAt || 0, hasPassword: Boolean(u.hash), links, codesLeft: (u.rc || []).filter((c) => !c.used).length };
+    return {
+      ...pub(u), msgs: u.msgs || 0, pwAt: u.pwAt || 0, hasPassword: Boolean(u.hash), links, codesLeft: (u.rc || []).filter((c) => !c.used).length,
+      bio: u.bio || '', pronouns: u.pronouns || '', accent: u.accent || '', dmFrom: u.dmFrom || 'everyone', blocks: u.blocks || [],
+      perms: ROLES ? ROLES.permsOf(u) : [],
+    };
   }
 
   return {
     sessionOf, startSession, endSession, register, login, recover, changePassword, newCodes, deleteAccount,
     listSessions, revokeSession, revokeOthers: (u, keep) => dropSessions(u, keep), profile, account, find,
-    findByIdentity, link, unlink, suggestName, registerLinked, ownerCheck,
+    findByIdentity, link, unlink, suggestName, registerLinked, ownerCheck, updateProfile, setAvatar, block,
     save: saveUser, all: () => users.values(),
   };
 }
 
-module.exports = { createAccounts, badges, pub, isMod, isOwner, lc, dayUTC, passwordProblem, device, normCode };
+module.exports = { createAccounts, badges, pub, isMod, isOwner, lc, dayUTC, passwordProblem, device, normCode, useRoles };

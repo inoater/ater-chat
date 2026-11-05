@@ -10,13 +10,16 @@
  *   kv        small settings documents: pins, bans, mutes, settings, filters, retired
  *   audit     moderator actions; kept 180 days
  *   reports   messages people reported; kept 90 days
+ *   media     profile pictures and role badges (small, pre-resized images)
+ *   dms       direct messages; dmconv keeps the latest message per conversation
+ *   polls     finished polls
  *
  * The server keeps hot state (accounts, pins, recent chat…) in memory and
  * writes changes through, so one server process should own the database.
  */
 const { MongoClient } = require('mongodb');
 
-const HIST_LOAD = 300;
+const HIST_LOAD = 1500; // across all rooms
 const DAY = 86400;
 
 async function createMongoStore(uri, { dbName = 'ater', prefix = '' } = {}) {
@@ -25,7 +28,8 @@ async function createMongoStore(uri, { dbName = 'ater', prefix = '' } = {}) {
   const db = client.db(dbName);
   const c = (name) => db.collection(prefix + name);
   const users = c('users'), sessions = c('sessions'), messages = c('messages'), emotes = c('emotes'),
-    kv = c('kv'), audit = c('audit'), reports = c('reports');
+    kv = c('kv'), audit = c('audit'), reports = c('reports'), media = c('media'),
+    dms = c('dms'), dmconv = c('dmconv'), polls = c('polls');
 
   await Promise.all([
     sessions.createIndex({ exp: 1 }, { expireAfterSeconds: 0 }),
@@ -36,6 +40,11 @@ async function createMongoStore(uri, { dbName = 'ater', prefix = '' } = {}) {
     reports.createIndex({ at: 1 }, { expireAfterSeconds: 90 * DAY }),
     reports.createIndex({ done: 1, at: -1 }),
     reports.createIndex({ 'msg.id': 1, by: 1 }),
+    messages.createIndex({ at: -1 }),
+    dms.createIndex({ k: 1, ts: -1 }),
+    dmconv.createIndex({ a: 1, 'last.ts': -1 }),
+    dmconv.createIndex({ b: 1, 'last.ts': -1 }),
+    polls.createIndex({ ended: -1 }),
   ]);
 
   // writes are fire-and-forget from the chat's point of view, but never silently lost
@@ -67,7 +76,7 @@ async function createMongoStore(uri, { dbName = 'ater', prefix = '' } = {}) {
     addMessage: (m) => bg(messages.insertOne({ ...m, _id: m.id, at: new Date(m.ts), name_lc: m.name.toLowerCase() })),
     deleteMessage: (id) => bg(messages.deleteOne({ _id: id })),
     deleteMessagesBy: (name) => bg(messages.deleteMany({ name_lc: name.toLowerCase() })),
-    clearMessages: () => bg(messages.deleteMany({})),
+    clearMessages: (room) => bg(messages.deleteMany(!room ? {} : room === 'live' ? { $or: [{ room: 'live' }, { room: { $exists: false } }] } : { room })),
 
     saveEmote: (name, e) => bg(emotes.replaceOne({ _id: name }, e, { upsert: true })),
     deleteEmote: (name) => bg(emotes.deleteOne({ _id: name })),
@@ -94,6 +103,26 @@ async function createMongoStore(uri, { dbName = 'ater', prefix = '' } = {}) {
       if (filter.msgId) q['msg.id'] = filter.msgId;
       return bg(reports.updateMany(q, { $set: patch }));
     },
+
+    saveMedia: (key, m) => bg(media.replaceOne({ _id: key }, m, { upsert: true })),
+    async getMedia(key) { const m = await media.findOne({ _id: key }); return m && strip(m); },
+    deleteMedia: (key) => bg(media.deleteOne({ _id: key })),
+
+    async addDM(m) {
+      const [a, b] = m.k.split('|');
+      await dms.insertOne({ ...m, _id: m.id });
+      await dmconv.replaceOne({ _id: m.k }, { k: m.k, a, b, last: { from: m.from, text: m.text, ts: m.ts } }, { upsert: true });
+    },
+    async dmThread(k, before = Infinity, limit = 50) {
+      const q = { k }; if (before !== Infinity) q.ts = { $lt: before };
+      return (await dms.find(q).sort({ ts: -1 }).limit(limit).toArray()).reverse().map(strip);
+    },
+    async dmConvs(u) { return (await dmconv.find({ $or: [{ a: u }, { b: u }] }).sort({ 'last.ts': -1 }).limit(100).toArray()).map(strip); },
+    dmUnread: (k, u, since) => dms.countDocuments({ k, from: { $ne: u }, ts: { $gt: since } }),
+
+    addPoll: (p) => bg(polls.insertOne({ ...p, _id: p.id })),
+    async listPolls(limit = 50) { return (await polls.find().sort({ ended: -1 }).limit(limit).toArray()).map(strip); },
+    countMessages: (since) => messages.countDocuments({ at: { $gte: new Date(since) } }),
 
     async ping() { try { await db.command({ ping: 1 }); return true; } catch { return false; } },
     close: () => client.close(),

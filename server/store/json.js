@@ -6,13 +6,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const HIST_MAX = 300;
+const HIST_MAX = 1500; // across all rooms
+const DM_MAX = 20000;
+const POLLS_MAX = 200;
 const AUDIT_MAX = 2000;
 const REPORTS_MAX = 1000;
 
 function createJsonStore(file, { delay = 800 } = {}) {
   let db = {
     users: {}, sessions: {}, emotes: {}, kv: {}, history: [], audit: [], reports: [],
+    media: {}, dms: [], dmconv: {}, polls: [],
   };
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -58,7 +61,7 @@ function createJsonStore(file, { delay = 800 } = {}) {
     addMessage(m) { db.history.push(m); if (db.history.length > HIST_MAX) db.history.splice(0, db.history.length - HIST_MAX); save(); return ok(); },
     deleteMessage(id) { db.history = db.history.filter((m) => m.id !== id); save(); return ok(); },
     deleteMessagesBy(name) { const k = name.toLowerCase(); db.history = db.history.filter((m) => m.name.toLowerCase() !== k); save(); return ok(); },
-    clearMessages() { db.history = []; save(); return ok(); },
+    clearMessages(room) { db.history = room ? db.history.filter((m) => (m.room || 'live') !== room) : []; save(); return ok(); },
 
     saveEmote(name, e) { db.emotes[name] = e; save(); return ok(); },
     deleteEmote(name) { delete db.emotes[name]; save(); return ok(); },
@@ -80,6 +83,23 @@ function createJsonStore(file, { delay = 800 } = {}) {
       for (const r of db.reports) if ((!filter.id || r.id === filter.id) && (!filter.msgId || r.msg.id === filter.msgId) && !r.done) Object.assign(r, patch);
       save(); return ok();
     },
+
+    saveMedia(key, m) { db.media[key] = m; save(); return ok(); },
+    getMedia(key) { return ok(db.media[key] || null); },
+    deleteMedia(key) { delete db.media[key]; save(); return ok(); },
+
+    addDM(m) {
+      db.dms.push(m); if (db.dms.length > DM_MAX) db.dms.splice(0, db.dms.length - DM_MAX);
+      db.dmconv[m.k] = { k: m.k, a: m.k.split('|')[0], b: m.k.split('|')[1], last: { from: m.from, text: m.text, ts: m.ts } };
+      save(); return ok();
+    },
+    dmThread(k, before = Infinity, limit = 50) { return ok(db.dms.filter((m) => m.k === k && m.ts < before).slice(-limit)); },
+    dmConvs(u) { return ok(Object.values(db.dmconv).filter((c) => c.a === u || c.b === u).sort((x, y) => y.last.ts - x.last.ts).slice(0, 100)); },
+    dmUnread(k, u, since) { return ok(db.dms.filter((m) => m.k === k && m.from !== u && m.ts > since).length); },
+
+    addPoll(p) { db.polls.push(p); if (db.polls.length > POLLS_MAX) db.polls.splice(0, db.polls.length - POLLS_MAX); save(); return ok(); },
+    listPolls(limit = 50) { return ok(db.polls.slice(-limit).reverse()); },
+    countMessages(since) { return ok(db.history.filter((m) => m.ts >= since).length); },
 
     ping: () => ok(true),
     async close() { clearTimeout(timer); timer = null; write(); },
