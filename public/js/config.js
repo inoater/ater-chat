@@ -12,7 +12,7 @@ const CONFIG={
   server:'',
   /* Twitch user ID whose 7TV emote set Ater chatters can use (optional, numbers only) */
   sevenTV:'',
-  /* Kick relay (see kick-relay.js). Leave '' to type it into the Kick tab instead */
+  /* Kick relay (see kick-relay/README.md). Leave '' to type it into the Kick tab instead */
   kickRelay:'',
   /* fetch live status / viewers / uptime (Kick API + decapi.me for Twitch). Best effort. */
   liveStatus:true,

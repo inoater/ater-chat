@@ -1,0 +1,9 @@
+name = "ater-kick-relay"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Sites allowed to use this relay. "*" = any. Example: "https://ater.live,http://localhost:8080"
+ALLOWED_ORIGINS = "*"
+# Host suffixes the relay may open WebSockets to.
+WS_HOSTS = "kick.com"

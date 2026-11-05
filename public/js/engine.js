@@ -307,7 +307,7 @@ function Kick(){
     kickUid='';kickCh='';kickSub=[];
     if(!id){
       status('kk','wait','looking up…');
-      try{const r=await fetch('https://kick.com/api/v2/channels/'+encodeURIComponent(slug));const j=await r.json();id=j.chatroom.id;kickSub=(j.subscriber_badges||[]).filter(b=>b&&b.badge_image&&b.badge_image.src).sort((a,b)=>a.months-b.months);kickUid=String(j.user_id||(j.user&&j.user.id)||'');kickCh=String(j.id||'')}catch{}
+      try{const r=await fetch((rl||'https://kick.com')+'/api/v2/channels/'+encodeURIComponent(slug));const j=await r.json();id=j.chatroom.id;kickSub=(j.subscriber_badges||[]).filter(b=>b&&b.badge_image&&b.badge_image.src).sort((a,b)=>a.months-b.months);kickUid=String(j.user_id||(j.user&&j.user.id)||'');kickCh=String(j.id||'')}catch{}
       if(!id){stop=true;status('kk','err','add the chatroom ID');return false}
     }
     CHAN.kk=slug||'chatroom-'+id;

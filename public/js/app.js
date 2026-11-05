@@ -644,7 +644,7 @@ setChat(LS.get('chatOn',true));
 const LIVE={twitch:null,kick:null};
 async function fetchT(url,ms=7000){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,{signal:c.signal});if(!r.ok)throw new Error(r.status);return r}finally{clearTimeout(t)}}
 async function liveKick(slug){
-  const j=await(await fetchT('https://kick.com/api/v2/channels/'+enc(slug))).json(),l=j&&j.livestream;
+  const j=await(await fetchT((relayBase(FIELDS.kkrl)||'https://kick.com')+'/api/v2/channels/'+enc(slug))).json(),l=j&&j.livestream;
   if(!l)return{live:false};
   const at=String(l.start_time||l.created_at||'');const since=at?Date.parse(at.replace(' ','T')+(/Z|[+-]\d\d:?\d\d$/.test(at)?'':'Z')):0;
   return{live:l.is_live!==false,viewers:+l.viewer_count||0,title:l.session_title||'',since:since||0,cat:(l.categories&&l.categories[0]&&l.categories[0].name)||''};
