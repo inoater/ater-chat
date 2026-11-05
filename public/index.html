@@ -72,6 +72,10 @@
 <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14M10 8l-4 4 4 4M6 12h10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="i-google" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.3c0-.8-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-7.9z"/><path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.5-2.7c-1 .7-2.2 1-3.8 1-2.9 0-5.4-2-6.3-4.6H2.1v2.8A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.7 14c-.2-.7-.4-1.3-.4-2s.1-1.4.4-2V7.2H2.1a11 11 0 0 0 0 9.6z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.1-3.1A11 11 0 0 0 2.1 7.2L5.7 10C6.6 7.4 9.1 5.4 12 5.4z"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6" stroke-linecap="round"/></g></symbol>
+<symbol id="i-hash" viewBox="0 0 24 24"><path d="M9 4 7 20M17 4l-2 16M4 9h16M3.5 15h16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-img" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9" stroke-linecap="round"/></g></symbol>
 <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4m0 0h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="i-xs" viewBox="0 0 24 24"><path fill="currentColor" d="M17.8 3h3.1l-6.7 7.7L22 21h-6.2l-4.8-6.3L5.5 21H2.4l7.2-8.2L2 3h6.3l4.4 5.8zm-1.1 16.2h1.7L7.4 4.7H5.6z"/></symbol>
 <symbol id="i-dc" viewBox="0 0 24 24"><path fill="currentColor" d="M19.6 5.3A17 17 0 0 0 15.4 4l-.5 1.1a15.6 15.6 0 0 0-5.8 0L8.6 4a17 17 0 0 0-4.2 1.3C1.7 9.3 1 13.2 1.3 17a17 17 0 0 0 5.2 2.6l1.1-1.8c-.6-.2-1.2-.5-1.7-.9l.4-.3a12.2 12.2 0 0 0 10.4 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.8a17 17 0 0 0 5.2-2.6c.4-4.4-.7-8.3-2.1-11.7zM8.7 14.7c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1zm6.6 0c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z"/></symbol>
@@ -88,11 +92,13 @@
     <a href="#/" data-s="schedule">Schedule</a>
     <a href="#/" data-s="videos">Videos</a>
     <a href="#/" data-s="merch">Merch</a>
+    <a href="#/mod" data-r="mod" id="navMod" hidden>Mod</a>
   </nav>
   <div class="top-r">
     <div class="socials" id="socials"></div>
     <button class="kbtn" id="palBtn" aria-label="Search and commands"><svg><use href="#i-search"/></svg><span class="kt">Search or run a command</span><kbd>Ctrl K</kbd></button>
     <button class="btn btn-p btn-sm" id="signBtn" hidden>Sign in</button>
+    <button class="ic dmb" id="dmBtn" hidden title="Messages" aria-label="Messages"><svg><use href="#i-mail"/></svg><span class="cnt" id="dmTop" hidden>0</span></button>
     <button class="mechip" id="meChip" hidden aria-haspopup="true" aria-expanded="false"><span class="av" id="meAv"></span><span id="meName"></span></button>
     <button class="chan-btn" id="chanBtn" aria-expanded="false" aria-controls="sheet" title="Chat sources"><span class="mini"><span class="m at"><span class="atb"></span></span><span class="m tw" id="m-tw"><svg><use href="#i-tw"/></svg></span><span class="m kk" id="m-kk"><svg><use href="#i-kk"/></svg></span><span class="m yt" id="m-yt"><svg><use href="#i-yt"/></svg></span></span><span class="cl" id="chanLbl">Channels</span></button>
   </div>
@@ -141,7 +147,9 @@
       </div>
       <aside class="hero-side" aria-label="Chat right now">
         <div class="hs-h"><b>Chat right now</b><span class="mini" id="hsMini"></span><a class="btn btn-sm btn-o" href="#/bigscreen">Open</a></div>
+        <div class="rbar mini" id="miniRooms" hidden></div>
         <div class="hs-feed feed nots" id="miniFeed"><div class="hs-empty" id="miniEmpty">Ater chat shows up here. Open the Big Screen to join in.</div></div>
+        <form class="mform" id="miniForm" hidden autocomplete="off"><input id="miniIn" maxlength="500" placeholder="Say something…" aria-label="Message"><button class="ic" type="submit" aria-label="Send"><svg><use href="#i-send"/></svg></button></form>
         <div class="hs-f"><div class="stat"><b id="pmMin">0</b><small>msgs / min</small></div><div class="stat"><b id="pmUsers">0</b><small>chatting</small></div><div class="spark" id="spark" aria-hidden="true"></div></div>
       </aside>
       <div class="hero-info">
@@ -188,6 +196,12 @@
   </div>
 </main>
 
+<!-- ================= MOD DASHBOARD ================= -->
+<main id="v-mod" class="view">
+  <aside class="dnav" id="dnav"></aside>
+  <section class="dmain"><div class="dwrap" id="dmain"></div></section>
+</main>
+
 <!-- ================= BIG SCREEN ================= -->
 <main id="v-big" class="view">
   <div class="stage" id="stage">
@@ -228,11 +242,13 @@
       <button data-p="chat" class="on" role="tab">Chat</button>
       <button data-p="links" role="tab">Links<span class="cnt dim" id="lkN">0</span></button>
       <button data-p="board" role="tab">Top chatters</button>
+      <button data-p="dms" role="tab" id="dmTab" hidden>Messages<span class="cnt" id="dmN" hidden>0</span></button>
       <button data-p="inbox" role="tab">Mentions<span class="cnt" id="ibN" hidden>0</span></button>
       <button data-p="mod" role="tab" id="modTab" hidden><svg class="i"><use href="#i-shield"/></svg>Mod<span class="cnt" id="modN" hidden>0</span></button>
     </div>
     <div class="cp-body">
       <div class="pane" id="p-chat">
+        <div class="rbar" id="roomBar" hidden></div>
         <div id="atTop"></div>
         <div class="gask" id="gAsk" hidden></div>
         <div class="gbar" id="gBar" hidden></div>
@@ -256,6 +272,7 @@
         <div class="pane-tools"><input id="srQ" placeholder="Search messages, or from:name" autocomplete="off" spellcheck="false" aria-label="Search chat"><button class="ic" id="srX" aria-label="Close search"><svg><use href="#i-x"/></svg></button></div>
         <div class="scroll" id="srL"></div>
       </div>
+      <div class="pane" id="p-dms" hidden><div class="dms" id="dmsL"></div></div>
       <div class="pane" id="p-users" hidden><div class="scroll"><div class="ul" id="ulist"></div></div></div>
       <div class="pane" id="p-mod" hidden>
         <div class="pane-tools"><div class="seg" id="modSeg"><button data-k="reports" class="on">Reports</button><button data-k="log">Mod log</button><button data-k="words">Blocked words</button></div><span style="flex:1"></span><button class="ic" id="modRefresh" title="Refresh" aria-label="Refresh"><svg><use href="#i-swap"/></svg></button></div>
@@ -336,6 +353,19 @@
     <div class="mh"><span class="av" id="acAv"></span><h3 id="acctT">Account &amp; security</h3><button class="ic" id="acctX" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
     <div class="ac-sum" id="acSum"></div>
     <section class="acs">
+      <h4>Profile</h4>
+      <div class="pedit">
+        <button type="button" class="pav" id="peAv" title="Change your picture"><span id="peAvIn"></span><i><svg><use href="#i-img"/></svg></i></button>
+        <div class="pef">
+          <div class="row2"><label class="cl">Name colour<input type="color" id="peColor"></label><label class="cl">Card accent<input type="color" id="peAccent"></label><button type="button" class="linkb" id="peReset">Reset colours</button></div>
+          <input id="pePron" maxlength="20" placeholder="Pronouns (optional)">
+          <textarea id="peBio" maxlength="190" rows="2" placeholder="A line or two about you (optional)"></textarea>
+          <div class="row2"><label class="cl">Who can message me<select id="peDm"><option value="everyone">Everyone</option><option value="staff">Only the mod team</option><option value="nobody">Nobody</option></select></label><span style="flex:1"></span><button type="button" class="btn btn-o btn-sm" id="peView">Preview card</button><button type="button" class="btn btn-p btn-sm" id="peSave">Save profile</button></div>
+        </div>
+      </div>
+      <input type="file" id="peFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+    </section>
+    <section class="acs">
       <h4>Ways to sign in</h4>
       <div class="lnks" id="acLinks"></div>
     </section>
@@ -392,10 +422,13 @@
 </div>
 
 <div class="ctxm" id="ctx" role="menu" hidden></div>
+<div class="pcard" id="pcard" role="dialog" aria-label="Profile" hidden></div>
 <button class="thx" id="thx" type="button" hidden><svg class="i"><use href="#i-theater"/></svg>Exit theater <kbd>T</kbd></button>
 
 <script src="js/config.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/app.js"></script>
+<script src="js/social.js"></script>
+<script src="js/mod.js"></script>
 </body>
 </html>

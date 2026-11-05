@@ -370,7 +370,9 @@ function YouTube(){
 }
 
 /* ---- Ater chat (ater-server.js): our own chatters, emotes, pins, polls, whispers ---- */
-const ATER={up:false,me:null,es:null,emotes:new Map(),ew:new Map(),list:[],pins:[],poll:null,pres:{n:0,users:[]},settings:{},seen:new Set()};
+const ATER={up:false,me:null,es:null,emotes:new Map(),ew:new Map(),list:[],pins:[],poll:null,pres:{n:0,users:[]},settings:{},seen:new Set(),rooms:[{id:'live',name:'Live chat'}],roles:new Map(),dmUnread:0};
+/* roles come with paths like /api/media/rb-…; make them absolute for this server */
+function setRoles(list){const b=aterBase()||'';ATER.roles=new Map((list||[]).map(r=>[r.id,{...r,badge:r.badge?b+r.badge:null}]))}
 function aterBase(){if(CONFIG.server)return CONFIG.server.replace(/\/+$/,'');return/^https?:$/.test(location.protocol)?'':null}
 async function aterApi(path,body){
   const b=aterBase();if(b==null)return{error:'Ater chat needs ater-server.js running.'};
@@ -389,10 +391,11 @@ function aterTokens(text){
   return out;
 }
 const AT_BADGE={owner:['host','Broadcaster'],mod:['mod','Moderator'],og:['og','OG: one of the first 100 on Ater']};
-function aterBadges(b){return(b||[]).map(x=>{if(x.startsWith('streak:')){const n=+x.slice(7);return{p:'at',k:'streak',t:n+'-day chat streak',n}}const d=AT_BADGE[x];return d?{p:'at',k:d[0],t:d[1]}:null}).filter(Boolean)}
+const roleName=id=>(ATER.roles.get(id)||{}).name;
+function aterBadges(b){return(b||[]).map(x=>{if(x.startsWith('role:')){const r=ATER.roles.get(x.slice(5));return r&&r.badge?{p:'at',k:'role',t:r.name,img:r.badge,id:r.id}:null}if(x==='owner'||x==='mod'){const r=ATER.roles.get(x);if(r&&r.badge)return{p:'at',k:'role',t:r.name,img:r.badge,id:r.id};if(r)return{p:'at',k:AT_BADGE[x][0],t:r.name}}if(x.startsWith('streak:')){const n=+x.slice(7);return{p:'at',k:'streak',t:n+'-day chat streak',n}}const d=AT_BADGE[x];return d?{p:'at',k:d[0],t:d[1]}:null}).filter(Boolean)}
 function aterMsg(d,hist){
   if(ATER.seen.has(d.id))return;ATER.seen.add(d.id);
-  sevMsg('at',CONFIG.sevenTV||'',d.name,d.text,d.color,aterTokens(d.text),aterBadges(d.b),null,d.rp?{n:d.rp.n,t:d.rp.t,id:d.rp.id}:null,{sid:d.id,me:!!d.me,hist:!!hist,ts0:d.ts});
+  sevMsg('at',CONFIG.sevenTV||'',d.name,d.text,d.color,aterTokens(d.text),aterBadges(d.b),null,d.rp?{n:d.rp.n,t:d.rp.t,id:d.rp.id}:null,{sid:d.id,me:!!d.me,hist:!!hist,ts0:d.ts,room:d.room||'live',r:d.r||''});
 }
 function aterStart(){
   const b=aterBase();
@@ -405,6 +408,7 @@ function aterStart(){
   L('hello',d=>{
     ATER.up=true;ATER.me=d.me;ME=d.me&&d.me.name;mkAR();
     ATER.list=d.emotes||[];setEmotes(ATER.list,b);
+    ATER.rooms=d.rooms&&d.rooms.length?d.rooms:[{id:'live',name:'Live chat'}];setRoles(d.roles);if(d.me)ATER.me=d.me;
     ATER.pins=d.pins||[];ATER.featured=d.featured||null;ATER.poll=d.poll;ATER.pres=d.presence||{n:0,users:[]};ATER.settings=d.settings||{};
     status('at','on',ATER.pres.n+' here');emit('ater','hello');
     for(const m of d.history||[])aterMsg(m,true);
@@ -419,7 +423,10 @@ function aterStart(){
   L('settings',d=>{ATER.settings=d||{};emit('ater','settings')});
   L('notice',d=>emit('aternotice',d));
   L('whisper',d=>emit('whisper',d));
-  L('me',d=>{ATER.me=d.me;ME=d.me&&d.me.name;mkAR();emit('ater','me')});
+  L('dm',d=>emit('dm',d));
+  L('roles',d=>{setRoles(d);emit('ater','roles')});
+  L('rooms',d=>{ATER.rooms=d&&d.length?d:[{id:'live',name:'Live chat'}];emit('ater','rooms')});
+  L('me',d=>{const rk=u=>u?(u.roles||[]).join():'',was=rk(ATER.me);ATER.me=d.me;ME=d.me&&d.me.name;mkAR();emit('ater',was===rk(d.me)?'profile':'me')});
   L('modqueue',d=>{ATER.reports=d.reports||0;emit('ater','modqueue')});
   L('modlog',d=>emit('modlog',d));
   L('featured',d=>{const was=ATER.featured;ATER.featured=d;emit('ater','featured');emit('featured',{now:d,was})});
