@@ -104,7 +104,7 @@ function createChat(store, state, accounts) {
     const r = list.find((x) => x.id === id);
     if (!r) return { error: 'That report is already handled.' };
     let res = { ok: true };
-    if (action === 'delete') del(r.msg.id, mod.name);
+    if (action === 'delete') del(r.msg.id); // logged once below as report:delete
     else if (action === 'mute') res = command(mod, `/mute ${r.msg.name} 10m`);
     else if (action === 'ban') res = command(mod, `/ban ${r.msg.name} reported: ${r.reason || 'no reason'}`);
     if (res.error) return res;
@@ -112,7 +112,8 @@ function createChat(store, state, accounts) {
     await store.updateReports({ msgId: r.msg.id }, { done: true, by_mod: mod.name, action, doneAt: now() });
     const closed = list.filter((x) => x.msg.id === r.msg.id).length;
     openReports = Math.max(0, openReports - closed);
-    audit(mod.name, 'report:' + action, r.msg.name, r.msg.text);
+    // mute and ban already log themselves through the command; dismiss and delete are logged here
+    if (action === 'dismiss' || action === 'delete') audit(mod.name, 'report:' + action, r.msg.name, r.msg.text);
     queue();
     return { ok: true };
   }
