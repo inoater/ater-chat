@@ -20,3 +20,17 @@ services:
         value: ater
       - key: MONGODB_URI
         sync: false
+      # Sign in with Google / Twitch / Kick: each turns on when both are set
+      # (redirect URLs: https://YOUR-SITE/api/auth/oauth/<google|twitch|kick>/callback)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: TWITCH_CLIENT_ID
+        sync: false
+      - key: TWITCH_CLIENT_SECRET
+        sync: false
+      - key: KICK_CLIENT_ID
+        sync: false
+      - key: KICK_CLIENT_SECRET
+        sync: false
