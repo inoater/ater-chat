@@ -96,6 +96,12 @@ function createJsonStore(file, { delay = 800 } = {}) {
     dmThread(k, before = Infinity, limit = 50) { return ok(db.dms.filter((m) => m.k === k && m.ts < before).slice(-limit)); },
     dmConvs(u) { return ok(Object.values(db.dmconv).filter((c) => c.a === u || c.b === u).sort((x, y) => y.last.ts - x.last.ts).slice(0, 100)); },
     dmUnread(k, u, since) { return ok(db.dms.filter((m) => m.k === k && m.from !== u && m.ts > since).length); },
+    deleteDMsOf(u) {
+      const mine = (k) => k.split('|').includes(u);
+      db.dms = db.dms.filter((m) => !mine(m.k));
+      for (const k of Object.keys(db.dmconv)) if (mine(k)) delete db.dmconv[k];
+      save(); return ok();
+    },
 
     addPoll(p) { db.polls.push(p); if (db.polls.length > POLLS_MAX) db.polls.splice(0, db.polls.length - POLLS_MAX); save(); return ok(); },
     listPolls(limit = 50) { return ok(db.polls.slice(-limit).reverse()); },

@@ -45,6 +45,7 @@ async function createMongoStore(uri, { dbName = 'ater', prefix = '' } = {}) {
     dmconv.createIndex({ a: 1, 'last.ts': -1 }),
     dmconv.createIndex({ b: 1, 'last.ts': -1 }),
     polls.createIndex({ ended: -1 }),
+    dms.createIndex({ at: 1 }, { expireAfterSeconds: 180 * DAY }),
   ]);
 
   // writes are fire-and-forget from the chat's point of view, but never silently lost
@@ -110,15 +111,19 @@ async function createMongoStore(uri, { dbName = 'ater', prefix = '' } = {}) {
 
     async addDM(m) {
       const [a, b] = m.k.split('|');
-      await dms.insertOne({ ...m, _id: m.id });
+      await dms.insertOne({ ...m, _id: m.id, at: new Date(m.ts) });
       await dmconv.replaceOne({ _id: m.k }, { k: m.k, a, b, last: { from: m.from, text: m.text, ts: m.ts } }, { upsert: true });
     },
     async dmThread(k, before = Infinity, limit = 50) {
       const q = { k }; if (before !== Infinity) q.ts = { $lt: before };
-      return (await dms.find(q).sort({ ts: -1 }).limit(limit).toArray()).reverse().map(strip);
+      return (await dms.find(q, { projection: { at: 0 } }).sort({ ts: -1 }).limit(limit).toArray()).reverse().map(strip);
     },
     async dmConvs(u) { return (await dmconv.find({ $or: [{ a: u }, { b: u }] }).sort({ 'last.ts': -1 }).limit(100).toArray()).map(strip); },
     dmUnread: (k, u, since) => dms.countDocuments({ k, from: { $ne: u }, ts: { $gt: since } }),
+    async deleteDMsOf(u) {
+      const keys = (await dmconv.find({ $or: [{ a: u }, { b: u }] }, { projection: { _id: 1 } }).toArray()).map((c) => c._id);
+      if (keys.length) await Promise.all([dms.deleteMany({ k: { $in: keys } }), dmconv.deleteMany({ _id: { $in: keys } })]);
+    },
 
     addPoll: (p) => bg(polls.insertOne({ ...p, _id: p.id })),
     async listPolls(limit = 50) { return (await polls.find().sort({ ended: -1 }).limit(limit).toArray()).map(strip); },

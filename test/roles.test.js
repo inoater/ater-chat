@@ -179,6 +179,12 @@ describe('direct messages', () => {
     assert.equal((await c.call('/api/dm/list')).convs.length, 0);
     assert.equal((await a.call('/api/dm/thread?with=Charlie')).messages.length, 1);
   });
+
+  test('deleting an account deletes its conversations', async () => {
+    assert.equal((await c.call('/api/account/delete', { password: c.password })).ok, true);
+    assert.ok(!(await a.call('/api/dm/list')).convs.some((x) => x.with.name === 'Charlie'));
+    assert.ok((await a.call('/api/dm/list')).convs.some((x) => x.with.name === 'Bravo'));
+  });
 });
 
 describe('rooms, poll history and the dashboard', () => {

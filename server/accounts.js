@@ -272,7 +272,7 @@ function createAccounts(store, state, { owner = '', secureCookies = 'auto' } = {
     users.delete(k);
     for (const [p, l] of Object.entries(u.links || {})) idx.delete(p + ':' + l.id);
     retired[k] = now() + RETIRE_MS;
-    await Promise.all([store.deleteUser(k), store.saveKV('retired', retired), dropSessions(u), u.av ? store.deleteMedia('av-' + k) : null]);
+    await Promise.all([store.deleteUser(k), store.saveKV('retired', retired), dropSessions(u), u.av ? store.deleteMedia('av-' + k) : null, store.deleteDMsOf(k)]);
     return { ok: true };
   }
 
