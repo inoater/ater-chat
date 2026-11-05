@@ -27,6 +27,7 @@
  *
  *   moderators:
  *   POST /api/del  /api/pin  /api/unpin   { id }
+ *   POST /api/feature                     { p, u, note? } the Ater pick, or { clear: true }
  *   POST /api/poll                        { q, opts[], secs }
  *   POST /api/emote                       { name, data } (a data: URL) or { name, link } (a 7TV emote link)
  *   GET  /api/mod/reports                 open reports
@@ -178,6 +179,7 @@ async function createApp({
     if (p === '/api/del') return json(res, 200, { ok: chat.del(String(b.id || ''), u.name) });
     if (p === '/api/pin') return chat.pin(String(b.id || ''), u.name) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'That message is gone.' });
     if (p === '/api/unpin') { chat.unpin(String(b.id || ''), u.name); return json(res, 200, { ok: true }); }
+    if (p === '/api/feature') return reply(res, b.clear ? chat.unfeature(u.name) : chat.feature(u.name, b.p, b.u, b.note));
     if (p === '/api/mod/reports/resolve') {
       if (!['dismiss', 'delete', 'mute', 'ban'].includes(b.action)) return json(res, 400, { error: 'Unknown action.' });
       return reply(res, await chat.resolveReport(u, String(b.id || ''), b.action));

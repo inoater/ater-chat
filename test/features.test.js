@@ -3,6 +3,42 @@ const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { start, client, stream, pause } = require('./helpers');
 
+describe('the Ater pick', () => {
+  let s, host, fan, live;
+  before(async () => {
+    s = await start();
+    host = client(s.base); await host.register('Host');
+    fan = client(s.base); await fan.register('fanp');
+    live = await stream(s.base);
+    await live.next('hello');
+  });
+  after(async () => { live.close(); await s.stop(); });
+
+  test('moderators set it, everyone hears about it, new arrivals get it', async () => {
+    assert.equal((await fan.call('/api/feature', { p: 'twitch', u: 'someone' })).status, 403);
+    assert.match((await fan.say('/feature someone')).error, /moderators/i);
+    assert.equal((await host.call('/api/feature', { p: 'kick', u: 'CoStreamer', note: 'watch party' })).ok, true);
+    const f = await live.next('featured', (x) => x && x.u === 'costreamer');
+    assert.equal(f.data.p, 'kick');
+    assert.equal(f.data.note, 'watch party');
+    const late = await stream(s.base);
+    assert.equal((await late.next('hello')).data.featured.u, 'costreamer');
+    late.close();
+  });
+
+  test('/feature defaults to Twitch, checks names, /unfeature clears', async () => {
+    assert.equal((await host.say('/feature otherguy')).ok, true);
+    assert.equal((await live.next('featured', (x) => x && x.u === 'otherguy')).data.p, 'twitch');
+    await pause();
+    assert.match((await host.say('/feature bad/name')).error, /channel name/);
+    await pause();
+    assert.equal((await host.say('/unfeature')).ok, true);
+    await live.next('featured', (x) => x === null);
+    const log = (await host.call('/api/mod/log')).log.map((e) => e.act);
+    assert.ok(log.includes('feature') && log.includes('unfeature'));
+  });
+});
+
 describe('Ater 7TV emotes', () => {
   let s, host, fan;
   before(async () => {

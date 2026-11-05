@@ -749,3 +749,22 @@ html.ov .welcome,html.ov .jump{display:none!important}
 .words span{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 10px;border-radius:999px;background:var(--base);border:1px solid var(--line);font:500 12.5px var(--mono)}
 .words button{padding:0 6px;border-radius:999px;font-size:12px}
 .uc-p{padding:0 14px 8px;font-size:12px;color:var(--fg3);display:flex;gap:10px;flex-wrap:wrap}
+
+/* ============================================================
+   ATER PICK (featured stream)
+   ============================================================ */
+.ech.pick{border-color:transparent;background:linear-gradient(var(--l2),var(--l2)) padding-box,var(--rainbow) border-box;border:1px solid transparent;padding-right:10px}
+.ech.pick .i{width:13px;height:13px;margin-right:4px;vertical-align:-2px;color:#f5c518}
+.ech.pick.focus{color:var(--fg)}
+.pill.pickp{background:linear-gradient(90deg,#6366f133,#ec489933);border-color:#ec489955;color:var(--fg)}
+/* on the home page the pick plays under the countdown, dimmed; hover brings it forward */
+.media .pickf{filter:brightness(.42) saturate(.75) blur(1.5px);transform:scale(1.03);transition:filter .5s var(--ease),transform .6s var(--ease)}
+.media.picked .poster{background:radial-gradient(70% 80% at 50% 50%,#0a0a0b99,#0a0a0bdd);pointer-events:none;transition:opacity .45s var(--ease)}
+.media.picked .poster::before{opacity:.25}
+.media.picked:hover .poster{opacity:.08}
+.media.picked:hover .pickf{filter:none;transform:none}
+.picktag{position:absolute;left:14px;right:14px;bottom:14px;z-index:3;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;border-radius:14px;background:#0a0a0bcc;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line2);font-size:13px;color:var(--fg2);transform:translateY(6px);opacity:.85;transition:transform .3s var(--ease),opacity .3s}
+.picktag>span:not(.pm){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.picktag b{color:var(--fg);background:var(--rainbow);-webkit-background-clip:text;background-clip:text;color:transparent}
+.media.picked:hover .picktag{transform:none;opacity:1}
+@media(prefers-reduced-motion:reduce){.media .pickf,.picktag{transition:none}}

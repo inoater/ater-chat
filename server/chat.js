@@ -17,6 +17,7 @@
  *   whisper   { ts, from, to, text }  only to the two people involved
  *   me        { me }        your own account changed (made a mod, etc.)
  *   modqueue  { reports }   moderators only: how many reports are open
+ *   featured  { p, u, note, by, ts } | null   the Ater pick for the Big Screen changed
  */
 const crypto = require('crypto');
 const { badges, pub, isMod, isOwner, lc, dayUTC } = require('./accounts');
@@ -27,6 +28,8 @@ const HELLO_HISTORY = 150;
 const MAX_LEN = 500;
 const MAX_PINS = 3;
 const NEW_ACCOUNT_LINKS_MS = 10 * 60_000;
+const PLATFORMS = { twitch: 'twitch', tw: 'twitch', kick: 'kick', kk: 'kick', youtube: 'youtube', yt: 'youtube', rumble: 'rumble', angelthump: 'angelthump' };
+const HANDLE_RE = /^[A-Za-z0-9_.-]{2,40}$/;
 const LINK_RE = /(https?:\/\/|www\.)\S+|\b[a-z0-9-]+\.(com|net|org|gg|tv|io|ly|me|xyz|ru|co|link|app|site|live)\b/i;
 
 const now = () => Date.now();
@@ -62,7 +65,7 @@ function filterHit(text, words) {
 
 function createChat(store, state, accounts) {
   const kv = state.kv;
-  kv.pins ||= []; kv.bans ||= {}; kv.mutes ||= {}; kv.settings ||= { slow: 0 }; kv.filters ||= [];
+  kv.pins ||= []; kv.bans ||= {}; kv.mutes ||= {}; kv.settings ||= { slow: 0 }; kv.filters ||= []; kv.featured ||= null;
   const history = state.history;
   const clients = new Map(); // id -> { res, u }
   const recent = new Map();
@@ -196,6 +199,26 @@ function createChat(store, state, accounts) {
     store.deleteMessagesBy(name);
     return n;
   }
+  /* the Ater pick: a stream the Big Screen (and the home page) shows while the broadcaster is offline */
+  function feature(by, p, u, note) {
+    const plat = PLATFORMS[String(p || '').toLowerCase()];
+    u = String(u || '').trim().replace(/^[@#]/, '');
+    if (!plat) return { error: 'Pick twitch, kick, youtube, rumble or angelthump.' };
+    if (!HANDLE_RE.test(u)) return { error: 'That doesn’t look like a channel name.' };
+    kv.featured = { p: plat, u: plat === 'youtube' ? u : u.toLowerCase(), note: String(note || '').slice(0, 120), by, ts: now() };
+    saveKV('featured');
+    broadcast('featured', kv.featured);
+    audit(by, 'feature', u, plat + (note ? ' · ' + note : ''));
+    return { ok: true, info: `${u} on ${plat} is the Ater pick now.` };
+  }
+  function unfeature(by) {
+    if (!kv.featured) return { error: 'Nothing is featured.' };
+    const was = kv.featured;
+    kv.featured = null; saveKV('featured');
+    broadcast('featured', null);
+    audit(by, 'unfeature', was.u, was.p);
+    return { ok: true, info: 'The Ater pick is cleared.' };
+  }
   const isOnline = (k) => [...clients.values()].some((c) => c.u === k);
 
   function command(u, text) {
@@ -315,6 +338,13 @@ function createChat(store, state, accounts) {
         audit(u.name, 'filter:' + op, '', words.join(', '));
         return { ok: true, info: `${op === 'add' ? 'Blocked' : 'Unblocked'}: ${words.join(', ')}.` };
       }
+      case '/feature': {
+        const e = modOnly(); if (e) return e;
+        if (!rest.length) return { error: 'Usage: /feature [twitch|kick|youtube] name [note]' };
+        const hasPlat = PLATFORMS[rest[0].toLowerCase()] && rest[1];
+        return hasPlat ? feature(u.name, rest[0], rest[1], rest.slice(2).join(' ')) : feature(u.name, 'twitch', rest[0], rest.slice(1).join(' '));
+      }
+      case '/unfeature': { const e = modOnly(); if (e) return e; return unfeature(u.name); }
       case '/mod': case '/unmod': {
         if (!isOwner(u)) return { error: 'Only the broadcaster can change moderators.' };
         const t = target(); if (!t) return noUser();
@@ -389,7 +419,7 @@ function createChat(store, state, accounts) {
     clients.set(id, { res, u: who });
     send(res, 'hello', {
       me: pub(user), history: history.slice(-HELLO_HISTORY), pins: kv.pins, poll: pollPub(who),
-      emotes: emoteList(state), presence: presenceData(), settings: kv.settings,
+      emotes: emoteList(state), presence: presenceData(), settings: kv.settings, featured: kv.featured,
     });
     if (isMod(user)) send(res, 'modqueue', { reports: openReports });
     presence();
@@ -410,6 +440,7 @@ function createChat(store, state, accounts) {
     pin: (id, by) => { const m = history.find((x) => x.id === id); if (!m) return false; pinAdd({ ...m }, by); return true; },
     startPoll: (by, p) => pollStart(by, p),
     addEmote(by, name, e) { state.emotes[name] = e; store.saveEmote(name, e); broadcast('emotes', emoteList(state)); notice(`${by} added the emote ${name}.`); audit(by, 'emote:add', '', name); },
+    feature, unfeature,
     get clientCount() { return clients.size; },
   };
 }

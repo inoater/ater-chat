@@ -405,7 +405,7 @@ function aterStart(){
   L('hello',d=>{
     ATER.up=true;ATER.me=d.me;ME=d.me&&d.me.name;mkAR();
     ATER.list=d.emotes||[];setEmotes(ATER.list,b);
-    ATER.pins=d.pins||[];ATER.poll=d.poll;ATER.pres=d.presence||{n:0,users:[]};ATER.settings=d.settings||{};
+    ATER.pins=d.pins||[];ATER.featured=d.featured||null;ATER.poll=d.poll;ATER.pres=d.presence||{n:0,users:[]};ATER.settings=d.settings||{};
     status('at','on',ATER.pres.n+' here');emit('ater','hello');
     for(const m of d.history||[])aterMsg(m,true);
   });
@@ -422,6 +422,7 @@ function aterStart(){
   L('me',d=>{ATER.me=d.me;ME=d.me&&d.me.name;mkAR();emit('ater','me')});
   L('modqueue',d=>{ATER.reports=d.reports||0;emit('ater','modqueue')});
   L('modlog',d=>emit('modlog',d));
+  L('featured',d=>{const was=ATER.featured;ATER.featured=d;emit('ater','featured');emit('featured',{now:d,was})});
   es.onerror=()=>{const dead=es.readyState===2;if(ATER.up||dead){ATER.up=false;status('at',dead?'err':'wait',dead?'offline':'reconnecting…');emit('ater','down')}};
 }
 on('whisper',d=>{if(ME&&nm(d.from)===nm(ME))return;INBOX.push({id:d.ts+'-w',p:'at',name:d.from,text:d.text,ts:d.ts,r:false,w:true});ibSave();toast('Whisper from '+d.from,d.text);ping()});

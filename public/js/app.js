@@ -585,7 +585,14 @@ const EMB=LS.get('emb',null)||{list:defEmb(),main:''};
 if(!EMB.main&&EMB.list[0])EMB.main=ekey(EMB.list[0]);
 const saveEmb=()=>LS.set('emb',EMB);
 const curEmbed=()=>EMB.list.find(e=>ekey(e)===EMB.main)||EMB.list[0]||null;
-function addEmbed(e,main){if(!EMB.list.some(x=>ekey(x)===ekey(e)))EMB.list.push(e);if(main||!EMB.main)EMB.main=ekey(e);saveEmb();renderStage();heroSync()}
+/* What the Big Screen shows while you "follow Ater": the broadcaster live, else the Ater pick a mod chose, else your own list */
+const ownLive=()=>{const lp=liveAny();return lp?{p:lp,u:String(CONFIG.channels[lp]).toLowerCase(),own:true}:null};
+const atPick=()=>ATER.featured?{p:ATER.featured.p,u:ATER.featured.u,pick:true,note:ATER.featured.note,by:ATER.featured.by}:null;
+const following=()=>EMB.follow!==false;
+const stageEmbed=()=>(following()&&(ownLive()||atPick()))||curEmbed();
+const isOwn=e=>!!e&&String(CONFIG.channels[e.p]||'').toLowerCase()===String(e.u).toLowerCase();
+function follow(on){EMB.follow=on;saveEmb();renderStage();heroSync();emit('stage')}
+function addEmbed(e,main){if(!EMB.list.some(x=>ekey(x)===ekey(e)))EMB.list.push(e);if(main||!EMB.main)EMB.main=ekey(e);if(main)EMB.follow=false;saveEmb();renderStage();heroSync();emit('stage')}
 function removeEmbed(e){const k=ekey(e),n=EMB.list.length;EMB.list=EMB.list.filter(x=>ekey(x)!==k);if(EMB.main===k)EMB.main=EMB.list[0]?ekey(EMB.list[0]):'';saveEmb();renderStage();return EMB.list.length<n}
 function embFromParam(s){const l=s.split(',').map(x=>parseStream(x.replace(':',' '))).filter(Boolean);if(l.length){EMB.list=l;EMB.main=ekey(l[0]);saveEmb()}}
 const layoutUrl=()=>{const c=curEmbed(),l=[c,...EMB.list.filter(e=>e!==c)].filter(Boolean);return baseUrl()+'#/bigscreen?s='+l.map(e=>e.p+':'+e.u).join(',')};
@@ -597,15 +604,23 @@ function frameFor(e,muted){
   const f=document.createElement('iframe');f.src=PLAT[e.p].url(e.u,muted);f.allow='autoplay; fullscreen; picture-in-picture; encrypted-media';f.allowFullscreen=true;f.title=PLAT[e.p].l+' · '+e.u;f.dataset.k=ekey(e)+(muted?':m':'');return f;
 }
 function renderStage(){
-  const scrn=$('#screen'),off=$('#offcard'),cur=curEmbed();
+  const scrn=$('#screen'),off=$('#offcard'),cur=stageEmbed();
   const old=scrn.querySelector(':scope>iframe,:scope>.offcard:not(#offcard)');
   if(VIEW()!=='big'||!cur){if(old)old.remove();off.hidden=!!cur&&VIEW()==='big'?true:false}
   else{off.hidden=true;if(!old||old.dataset.k!==ekey(cur)){if(old)old.remove();scrn.append(frameFor(cur,false))}}
   /* strip */
   const strip=$('#strip');strip.replaceChildren();
+  const auto=following()&&(ownLive()||atPick());
+  const pk=atPick(),ol=ownLive();
+  if(pk||ol){
+    const e=ol||pk,c=h('span','ech pick'+(auto?' focus':''));c.dataset.k=ekey(e);c.dataset.auto='1';
+    const b=h('button','nm-b');b.append(icon('i-star','i'),ol?'Live: '+CONFIG.name:'Ater pick · '+e.u);
+    b.title=ol?CONFIG.name+' is live':'Picked by '+(pk.by||'the mods')+(pk.note?': '+pk.note:'')+'. Click to follow Ater again.';
+    b.onclick=()=>follow(true);c.append(b);strip.append(c);
+  }
   for(const e of EMB.list){
-    const c=h('span','ech'+(cur&&ekey(e)===ekey(cur)?' focus':''));const pm=h('span','pm '+PLAT[e.p].c);pm.append(icon(PLAT[e.p].i));c.append(pm);
-    const b=h('button','nm-b',e.u);b.title='Put on the main screen';b.onclick=()=>{EMB.main=ekey(e);saveEmb();renderStage()};
+    const c=h('span','ech'+(!auto&&cur&&ekey(e)===ekey(cur)?' focus':''));c.dataset.k=ekey(e);const pm=h('span','pm '+PLAT[e.p].c);pm.append(icon(PLAT[e.p].i));c.append(pm);
+    const b=h('button','nm-b',e.u);b.title='Put on the main screen';b.onclick=()=>{EMB.main=ekey(e);EMB.follow=false;saveEmb();renderStage();heroSync();emit('stage')};
     const x=h('button',null,'✕');x.title='Remove';x.setAttribute('aria-label','Remove '+e.u);x.onclick=()=>removeEmbed(e);
     c.append(b,x);strip.append(c);
   }
@@ -613,12 +628,28 @@ function renderStage(){
   const now=$('#now');now.replaceChildren();
   if(cur){
     const lv=liveFor(cur);if(lv&&lv.live)now.append(h('span','pill live','LIVE'));
+    if(cur.pick)now.append(h('span','pill pickp','Ater pick'));
     const pm=h('span','pm '+PLAT[cur.p].c);pm.append(icon(PLAT[cur.p].i));now.append(pm);
     const a=h('a');a.href=PLAT[cur.p].page(cur.u);a.target='_blank';a.rel='noopener';a.append(h('b',null,lv&&lv.title?lv.title:cur.u));a.title='Open on '+PLAT[cur.p].l;now.append(a);
     if(lv&&lv.live&&lv.viewers)now.append(h('span','pill mono',lv.viewers.toLocaleString()+' watching'));
     if(lv&&lv.live&&lv.since){const u=h('span','pill mono up');u.dataset.since=lv.since;u.textContent=hms((Date.now()-lv.since)/1e3);now.append(u)}
   }else now.append(h('span',null,'Big Screen'));
 }
+/* mods: ★ features what's on the stage for everyone (or clears the pick if that's what's showing) */
+function syncPickBtn(){
+  const b=$('#pickBtn'),cur=stageEmbed(),mod=!!(ATER.me&&ATER.me.mod);
+  b.hidden=!mod||!cur||(cur.own&&!cur.pick)||isOwn(cur);
+  if(b.hidden)return;
+  const on=!!cur.pick;b.classList.toggle('on',on);b.title=on?'Clear the Ater pick':'Make '+cur.u+' the Ater pick for everyone';
+}
+$('#pickBtn').onclick=async()=>{
+  const cur=stageEmbed();if(!cur)return;
+  let note='';
+  if(!cur.pick){note=prompt('Feature '+cur.u+' for everyone while '+CONFIG.name+' is offline? Add a note if you like (optional).','');if(note===null)return}
+  const r=cur.pick?await aterApi('/api/feature',{clear:true}):await aterApi('/api/feature',{p:cur.p,u:cur.u,note});
+  if(r.error)toast('Couldn’t change the Ater pick',r.error);else if(!cur.pick)follow(true);
+};
+on('stage',syncPickBtn);on('ater',syncPickBtn);
 /* platform pickers */
 for(const id of['#qaP','#addP'])$(id).replaceChildren(...Object.entries(PLAT).map(([k,v])=>new Option(v.l,k)));
 function submitStream(p,u){const e=parseStream(u.includes(' ')||/\//.test(u)?u:p+' '+u);if(!e){toast('That doesn’t look like a channel','Use letters, numbers, - or _. Or paste the stream link.');return false}addEmbed(e,true);return true}
@@ -803,10 +834,19 @@ function heroSync(){
   const lp=liveAny(),L=lp?LIVE[lp]:null,media=$('#heroMedia'),card=$('#heroCard');
   card.classList.toggle('live',!!lp);
   /* preview iframe only while home is visible */
-  const want=VIEW()==='home'&&lp&&!(lp==='twitch'&&!location.hostname)?lp+':'+CONFIG.channels[lp]:'';
-  if(want!==heroK){heroK=want;const old=media.querySelector('iframe,.unmute');media.querySelectorAll('iframe,.unmute').forEach(e=>e.remove());
-    if(want){media.append(frameFor({p:lp,u:CONFIG.channels[lp]},true));const b=h('a','btn btn-p btn-sm unmute');b.href='#/bigscreen';b.append(icon('i-tv','i'),'Watch with sound');b.onclick=()=>addEmbed({p:lp,u:CONFIG.channels[lp]},true);media.append(b)}}
-  $('#poster').hidden=!!want;
+  const pk=!lp&&atPick(),canPlay=e=>!(e.p==='twitch'&&!location.hostname);
+  const want=VIEW()!=='home'?'':lp&&canPlay({p:lp})?lp+':'+CONFIG.channels[lp]:pk&&canPlay(pk)?'pick:'+ekey(pk):'';
+  if(want!==heroK){heroK=want;media.querySelectorAll('iframe,.unmute,.picktag').forEach(e=>e.remove());
+    if(want&&lp){media.append(frameFor({p:lp,u:CONFIG.channels[lp]},true));const b=h('a','btn btn-p btn-sm unmute');b.href='#/bigscreen';b.append(icon('i-tv','i'),'Watch with sound');b.onclick=()=>follow(true);media.append(b)}
+    else if(want){
+      const fr=frameFor(pk,true);fr.classList.add('pickf');media.prepend(fr);
+      const t=h('div','picktag');const pm=h('span','pm '+PLAT[pk.p].c);pm.append(icon(PLAT[pk.p].i));
+      const txt=h('span');txt.append(h('b',null,'Ater pick'),' · '+pk.u+' on '+PLAT[pk.p].l+(pk.note?' · '+pk.note:''));
+      const a=h('a','btn btn-p btn-sm');a.href='#/bigscreen';a.append(icon('i-tv','i'),'Watch it');a.onclick=()=>follow(true);
+      t.append(pm,txt,a);media.append(t);
+    }}
+  media.classList.toggle('picked',!!(want&&pk));
+  $('#poster').hidden=!!(want&&lp);
   const badge=$('#heroBadge');badge.replaceChildren();
   const chips=$('#heroChips');chips.replaceChildren();
   const ns=nextSlot(),now=Date.now();
@@ -1069,8 +1109,14 @@ async function renderMod(){
 }
 on('modlog',e=>{if(PANE==='mod'&&MODK==='log'){const L=$('#modL');const em=L.querySelector('.empty');if(em)em.remove();L.prepend(logRow(e))}});
 
+on('featured',({now,was})=>{
+  renderStage();heroSync();emit('stage');
+  if(now&&(!was||ekey(was)!==ekey(now)))toast('New Ater pick: '+now.u,(now.note?now.note+' · ':'')+'on '+PLAT[now.p].l+(following()?'. It’s on your Big Screen.':'. Press ★ Ater pick on the Big Screen to watch.'),5000);
+});
+
 on('ater',k=>{
   syncAuth();syncStatus();renderUsers();syncMod();
+  if(k==='hello'){renderStage();heroSync()}
   if(k==='modqueue'&&PANE==='mod'&&MODK==='reports')renderMod();
   if(k==='me')toast(ATER.me&&ATER.me.mod?'You’re a moderator now':'Your role changed',ATER.me&&ATER.me.mod?'The Mod tab has reports and the mod log.':'');
   if(k==='hello'||k==='pins'||k==='poll')renderTop();
@@ -1106,7 +1152,7 @@ function palActions(q){
     {g:'Big Screen',t:'Theater mode',i:'i-theater',k:'T',run:()=>{go('#/bigscreen');setTheater(!document.body.classList.contains('theater'))}},
     {g:'Big Screen',t:'Swap chat side',i:'i-swap',run:()=>{go('#/bigscreen');swapSides()}},
     {g:'Big Screen',t:'Copy link to this layout',i:'i-copy',run:()=>copy(layoutUrl()).then(ok=>toast(ok?'Layout link copied':'Layout link',ok?'Anyone who opens it gets the same streams.':layoutUrl(),5000))},
-    ...EMB.list.map(e=>({g:'On the big screen',t:'Watch '+e.u+' on '+PLAT[e.p].l,i:PLAT[e.p].i,run:()=>{EMB.main=ekey(e);saveEmb();go('#/bigscreen');renderStage()}}))
+    ...EMB.list.map(e=>({g:'On the big screen',t:'Watch '+e.u+' on '+PLAT[e.p].l,i:PLAT[e.p].i,run:()=>{EMB.main=ekey(e);EMB.follow=false;saveEmb();go('#/bigscreen');renderStage();emit('stage')}}))
   ];
   q=q.trim();const out=[];
   if(q.startsWith('/'))out.push({g:'Run',t:'Run '+q,i:'i-chat',run:()=>{go('#/bigscreen');setTimeout(()=>runCmd(q),60)}});
