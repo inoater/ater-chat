@@ -24,7 +24,7 @@ const on=(type,f)=>bus.addEventListener(type,e=>f(e.detail));
 /* =====================================================================
    SETTINGS
    ===================================================================== */
-const SET=Object.assign({ts:false,logos:true,badges:true,combos:true,sv:true,fs:14,nobots:true,sound:false,ign:['nightbot','streamelements','streamlabs','moobot','fossabot','wizebot','botrix','sery_bot','kicklet'],alias:CONFIG.aliases},LS.get('set',{}));
+const SET=Object.assign({ts:false,logos:true,badges:true,combos:true,guestAsk:true,guestAuto:false,sv:true,fs:14,nobots:true,sound:false,ign:['nightbot','streamelements','streamlabs','moobot','fossabot','wizebot','botrix','sery_bot','kicklet'],alias:CONFIG.aliases},LS.get('set',{}));
 const saveSet=()=>{LS.set('set',SET);emit('set',SET)};
 let AR=null;
 let ME=null; /* your Ater chat name once signed in */
@@ -44,8 +44,8 @@ function validUrl(u){try{return new URL(u).protocol==='https:'&&u.length>10}catc
 function extract(t){return (String(t||'').match(URL_RE)||[]).map(cleanUrl).filter(validUrl)}
 function titleOf(t){const s=String(t||'').replace(URL_RE,' ').replace(/\s+/g,' ').trim();return s.length>2?s.slice(0,140):''}
 
-const STATUS={at:{c:'',t:'off'},tw:{c:'',t:'off'},kk:{c:'',t:'off'},yt:{c:'',t:'off'}};
-const CHAN={at:'ater',tw:'',kk:'',yt:''},ACTIVE={tw:false,kk:false,yt:false};
+const STATUS={at:{c:'',t:'off'},tw:{c:'',t:'off'},kk:{c:'',t:'off'},yt:{c:'',t:'off'},gtw:{c:'',t:'off'},gkk:{c:'',t:'off'}};
+const CHAN={at:'ater',tw:'',kk:'',yt:'',gtw:'',gkk:''},ACTIVE={tw:false,kk:false,yt:false};
 let YTVID='';
 function status(p,c,t){STATUS[p]={c,t};emit('status',{p,c,t})}
 
@@ -64,9 +64,8 @@ async function twBadges(spec,room){
   }
   return out;
 }
-let kickSub=[];
 const KKK={broadcaster:'host',moderator:'mod',vip:'vip',verified:'ver',subscriber:'sub',og:'og',founder:'founder',sub_gifter:'gifter',staff:'staff'};
-function kickBadges(list){
+function kickBadges(list,kickSub=[]){
   if(!Array.isArray(list))return[];
   const out=[];
   for(const b of list){
@@ -155,7 +154,7 @@ const BUF=[],BUF_MAX=600;
 function publish(m){
   m.id=++seq;m.ts=m.ts0||Date.now();m.ch=CHAN[m.p];
   m.urls=extract(m.text);
-  m.mention=!!(AR&&!isSelf(m.name)&&AR.test(m.text+' '+(m.rp?m.rp.n:'')));
+  m.mention=!m.guest&&!!(AR&&!isSelf(m.name)&&AR.test(m.text+' '+(m.rp?m.rp.n:'')));
   m.bot=isIgn(m.name)||/^!\w/.test(m.text);
   for(const t of m.toks)if(t&&t.url&&t.src!=='7tv')SEEN_EMO.set(t.name,t.url);
   BUF.push(m);if(BUF.length>BUF_MAX)BUF.shift();
@@ -173,7 +172,7 @@ function twCash(g){
 }
 function twReply(g){const n=un(g['reply-parent-display-name']||g['reply-parent-user-login']);return n?{n,t:un(g['reply-parent-msg-body'])}:null}
 function twStrip(tk,g){const l=g['reply-parent-user-login'];if(l&&typeof tk[0]==='string'){tk[0]=tk[0].replace(new RegExp('^@'+l+'\\s+','i'),'');if(tk[0]==='')tk.shift()}return tk}
-function twNotice(u){
+function twNotice(u,x){
   const g=tt(u[1]),id=g['msg-id'],t=u[2]||'',PL={Prime:'Prime','1000':'Tier 1','2000':'Tier 2','3000':'Tier 3'};
   let n=un(g['display-name']||g.login),k,hd;
   const pl=PL[g['msg-param-sub-plan']]||'',pt=pl?' ('+pl+')':'';
@@ -184,34 +183,34 @@ function twNotice(u){
   else if(id==='giftpaidupgrade'||id==='anongiftpaidupgrade'){k='gift';hd='is continuing their gifted sub'}
   else if(id==='raid'){k='raid';n=un(g['msg-param-displayName']||n);hd='is raiding with '+g['msg-param-viewerCount']+' viewers'}
   else return;
-  sevMsg('tw',g['room-id'],n,t,g.color,t?twTokens(t,g.emotes):[],null,{k,t:hd.replace(/\s+/g,' ')});
+  sevMsg('tw',g['room-id'],n,t,g.color,t?twTokens(t,g.emotes):[],null,{k,t:hd.replace(/\s+/g,' ')},null,x);
 }
-function Twitch(){
+/* k: status key ('tw' for your channel, 'gtw' for a guest); x: extra fields for every message (guest marker) */
+function Twitch(k='tw',x=null){
   let ws,stop=true,retry=0,ch,tm;
   function open(){
-    status('tw','wait','connecting…');
-    try{ws=new WebSocket('wss://irc-ws.chat.twitch.tv:443')}catch{status('tw','err','blocked');return}
+    status(k,'wait','connecting…');
+    try{ws=new WebSocket('wss://irc-ws.chat.twitch.tv:443')}catch{status(k,'err','blocked');return}
     ws.onopen=()=>{ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');ws.send('PASS SCHMOOPIIE');ws.send('NICK justinfan'+(10000+Math.random()*80000|0));ws.send('JOIN #'+ch)};
     ws.onmessage=e=>String(e.data).split('\r\n').forEach(line=>{
       if(!line)return;
       if(line.startsWith('PING')){ws.send('PONG :tmi.twitch.tv');return}
-      if(line.includes(' JOIN #')){retry=0;status('tw','on','#'+ch)}
-      const u=line.match(/^(?:@(\S+) )?:tmi\.twitch\.tv USERNOTICE #\S+(?: :(.*))?$/);if(u){twNotice(u);return}
+      if(line.includes(' JOIN #')){retry=0;status(k,'on','#'+ch)}
+      const u=line.match(/^(?:@(\S+) )?:tmi\.twitch\.tv USERNOTICE #\S+(?: :(.*))?$/);if(u){twNotice(u,x);return}
       if(/ CLEARCHAT #/.test(line)){const m=line.match(/CLEARCHAT #\S+ :(\S+)/);if(m)emit('purge',{p:'tw',name:m[1]});return}
       const m=line.match(/^(?:@(\S+) )?:([^!\s]+)![^ ]+ PRIVMSG #\S+ :(.*)$/);
       if(!m)return;
       const tags=tt(m[1]);
       let t=m[3];if(t.startsWith('\u0001ACTION '))t=t.slice(8,-1);
-      sevMsg('tw',tags['room-id'],(tags['display-name']||m[2]).replace(/\\s/g,' '),t,tags.color,twStrip(twTokens(t,tags.emotes),tags),twBadges(tags.badges,tags['room-id']),twCash(tags),twReply(tags));
+      sevMsg('tw',tags['room-id'],(tags['display-name']||m[2]).replace(/\\s/g,' '),t,tags.color,twStrip(twTokens(t,tags.emotes),tags),twBadges(tags.badges,tags['room-id']),twCash(tags),twReply(tags),x);
     });
-    ws.onclose=()=>{if(stop)return;status('tw','wait','retrying…');tm=setTimeout(open,backoff(retry++))};
+    ws.onclose=()=>{if(stop)return;status(k,'wait','retrying…');tm=setTimeout(open,backoff(retry++))};
   }
-  return{start(o){ch=String(o.ch||'').trim().replace(/^#/,'').replace(/^https?:\/\/(www\.)?twitch\.tv\//i,'').split(/[/?]/)[0].toLowerCase();if(!ch)return status('tw','err','enter a channel'),false;stop=false;retry=0;CHAN.tw=ch;open();return true},
-    stop(){stop=true;clearTimeout(tm);if(ws){ws.onclose=null;try{ws.close()}catch{}}status('tw','','off')}};
+  return{start(o){ch=String(o.ch||'').trim().replace(/^#/,'').replace(/^https?:\/\/(www\.)?twitch\.tv\//i,'').split(/[/?]/)[0].toLowerCase();if(!ch)return status(k,'err','enter a channel'),false;stop=false;retry=0;CHAN[k]=ch;open();return true},
+    stop(){stop=true;clearTimeout(tm);if(ws){ws.onclose=null;try{ws.close()}catch{}}status(k,'','off')}};
 }
 
 /* ---- Kick (Centrifugo, through a relay since Oct 2026) ---- */
-let kickUid='',kickCh='';
 function kickReply(d){
   let m=d.metadata;if(typeof m==='string'){try{m=JSON.parse(m)}catch{m=null}}
   const o=m&&m.original_sender,c=m&&m.original_message;
@@ -219,17 +218,17 @@ function kickReply(d){
   return{n:String(o.username),t:String((c&&c.content)||'').replace(/\[emote:\d+:([^\]]+)\]/g,'$1')};
 }
 const KICK_ALERT=/^((App\\Events\\)?(SubscriptionEvent|GiftedSubscriptionsEvent|StreamHostEvent)|KicksGifted)$/,KICK_CHAT=/^(App\\Events\\)?ChatMessageEvent$/,kseen=new Map();
-function kickAlert(m){
+function kickAlert(m,kickUid,x){
   const key=m.event+m.data,now=Date.now(),was=kseen.get(key);
   if(was&&now-was<3000)return;kseen.set(key,now);if(kseen.size>100)kseen.delete(kseen.keys().next().value);
   let d;try{d=JSON.parse(m.data)}catch{return}
-  const e=m.event.replace(/^App\\Events\\/,'');let n,k,hd,x='',c='';
+  const e=m.event.replace(/^App\\Events\\/,'');let n,k,hd,t='',c='';
   if(e==='SubscriptionEvent'){n=d.username;k='sub';hd=d.months>1?'resubscribed for '+d.months+' months':'subscribed'}
   else if(e==='GiftedSubscriptionsEvent'){n=d.gifter_username;k='gift';const l=d.gifted_usernames||[],q=l.length||1;hd='gifted '+q+(q>1?' subs':' sub')+(q===1&&l[0]?' to '+l[0]:'')}
-  else if(e==='StreamHostEvent'){n=d.host_username;k='raid';hd='is hosting with '+d.number_viewers+' viewers';x=d.optional_message||''}
-  else{const s=d.sender||{},g=d.gift||{};n=s.username;c=s.username_color;k='cash';hd='sent '+g.amount+' Kicks'+(g.name?' ('+g.name+')':'');x=d.message||''}
+  else if(e==='StreamHostEvent'){n=d.host_username;k='raid';hd='is hosting with '+d.number_viewers+' viewers';t=d.optional_message||''}
+  else{const s=d.sender||{},g=d.gift||{};n=s.username;c=s.username_color;k='cash';hd='sent '+g.amount+' Kicks'+(g.name?' ('+g.name+')':'');t=d.message||''}
   if(!n)return;
-  sevMsg('kk',kickUid,String(n),String(x),c,x?kickTokens(String(x)):[],null,{k,t:hd});
+  sevMsg('kk',kickUid,String(n),String(t),c,t?kickTokens(String(t)):[],null,{k,t:hd},null,x);
 }
 function relayBase(raw){
   let u=String(raw||'').trim()||CONFIG.kickRelay;
@@ -246,15 +245,15 @@ async function kickChannel(slug,rl){
   throw new Error('lookup failed');
 }
 const kickChannels=(id,ch)=>['chatrooms.'+id+'.v2','chatroom_'+id].concat(ch?['channel_'+ch]:[]);
-function Kick(){
-  let ws,stop=true,retry=0,id,gen=0,tm,dog,rt,rl='';
+function Kick(k='kk',x=null){
+  let ws,stop=true,retry=0,id,gen=0,tm,dog,rt,rl='',kickUid='',kickCh='',kickSub=[];
   const seen=new Set();
   const uuid=()=>window.crypto&&crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:r&3|8).toString(16)});
   const post=async(api,path,body)=>{const r=await fetch(api+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error('HTTP '+r.status);return(await r.json()).data||{}};
   function clear(){clearTimeout(tm);clearTimeout(dog);clearTimeout(rt);if(ws){ws.onopen=ws.onmessage=ws.onclose=ws.onerror=null;try{ws.close()}catch{}ws=null}}
-  function giveUp(msg){stop=true;gen++;clear();status('kk','err',msg);ACTIVE.kk=false;emit('active')}
-  function blocked(){if(navigator.onLine===false)return giveUp('offline');emit('kickhint',true);giveUp('relay needed')}
-  function later(){if(stop)return;clear();status('kk','wait','retrying…');tm=setTimeout(open,backoff(retry++))}
+  function giveUp(msg){stop=true;gen++;clear();status(k,'err',msg);if(k==='kk'){ACTIVE.kk=false;emit('active')}}
+  function blocked(){if(navigator.onLine===false)return giveUp('offline');if(k==='kk')emit('kickhint',true);giveUp('relay needed')}
+  function later(){if(stop)return;clear();status(k,'wait','retrying…');tm=setTimeout(open,backoff(retry++))}
   function push(p){
     const d0=p&&p.pub&&p.pub.data;if(!d0||!d0.event)return;
     const ev=String(d0.event),raw=typeof d0.data==='string'?d0.data:JSON.stringify(d0.data);
@@ -263,13 +262,13 @@ function Kick(){
       if(!d||!d.sender)return;
       if(d.id){if(seen.has(d.id))return;seen.add(d.id);if(seen.size>500)seen.delete(seen.values().next().value)}
       const c=String(d.content==null?'':d.content),idn=d.sender.identity||{};
-      sevMsg('kk',kickUid,d.sender.username,c.replace(/\[emote:\d+:([^\]]+)\]/g,'$1'),idn.color,kickTokens(c),kickBadges(idn.badges),null,kickReply(d));
-    }else if(KICK_ALERT.test(ev))kickAlert({event:ev,data:raw});
+      sevMsg('kk',kickUid,d.sender.username,c.replace(/\[emote:\d+:([^\]]+)\]/g,'$1'),idn.color,kickTokens(c),kickBadges(idn.badges,kickSub),null,kickReply(d),x);
+    }else if(KICK_ALERT.test(ev))kickAlert({event:ev,data:raw},kickUid,x);
   }
   async function open(){
     if(stop)return false;
     clear();const my=++gen,api=rl||'https://web.kick.com',cid=uuid();
-    status('kk','wait','connecting…');
+    status(k,'wait','connecting…');
     let url,tok;
     try{
       const c=await post(api,'/api/v1/realtime/connection',{client:{id:cid,type:'web'},capabilities:{accepted_providers:[{provider:'centrifugo'}]}});
@@ -281,7 +280,7 @@ function Kick(){
     }catch(e){
       if(my!==gen||stop)return false;
       if(!rl){blocked();return false}
-      status('kk','err',/^HTTP/.test(e.message)?'relay error '+e.message.slice(5):'relay unreachable');
+      status(k,'err',/^HTTP/.test(e.message)?'relay error '+e.message.slice(5):'relay unreachable');
       tm=setTimeout(later,1500);return true;
     }
     if(my!==gen||stop)return false;
@@ -297,30 +296,30 @@ function Kick(){
     };
     function frame(m){
       if(!Object.keys(m).length){send('{}');return}
-      if(m.error){const N=kickChannels(id,kickCh).length;if(m.id===1||m.id>1+N)return later();if(m.id===2)status('kk','err','subscribe failed');return}
+      if(m.error){const N=kickChannels(id,kickCh).length;if(m.id===1||m.id>1+N)return later();if(m.id===2)status(k,'err','subscribe failed');return}
       if(m.id===1&&m.connect){ping=m.connect.ping||25;ttl=m.connect.ttl||2700;arm();for(const c of kickChannels(id,kickCh))send({subscribe:{channel:c},id:++sid});rt=setTimeout(refresh,ttl*750);return}
-      if(m.id===2&&m.subscribe&&!live){live=true;retry=0;status('kk','on',CHAN.kk);emit('kickhint',false);return}
+      if(m.id===2&&m.subscribe&&!live){live=true;retry=0;status(k,'on',CHAN[k]);if(k==='kk')emit('kickhint',false);return}
       if(m.refresh&&m.id>1){clearTimeout(rt);rt=setTimeout(refresh,(+m.refresh.ttl||ttl)*750);return}
       if(m.push)return push(m.push);
     }
     sock.onopen=()=>{if(my!==gen)return;opened=true;arm();send({connect:{token:tok,name:'js'},id:1})};
     sock.onmessage=e=>{if(my!==gen)return;arm();for(const line of String(e.data).split('\n')){const t=line.trim();if(!t)continue;let m;try{m=JSON.parse(t)}catch{continue}frame(m)}};
-    sock.onclose=()=>{if(my!==gen||stop)return;if(!opened&&!rl)return blocked();if(!opened)status('kk','err','relay error');later()};
+    sock.onclose=()=>{if(my!==gen||stop)return;if(!opened&&!rl)return blocked();if(!opened)status(k,'err','relay error');later()};
     return true;
   }
   return{async start(o){
     const slug=String(o.ch||'').trim().toLowerCase().replace(/^https?:\/\/(www\.)?kick\.com\//i,'').split(/[/?]/)[0];id=String(o.id||'').trim();rl=relayBase(o.relay);
-    if(!id&&!slug)return status('kk','err','enter a channel'),false;
+    if(!id&&!slug)return status(k,'err','enter a channel'),false;
     stop=false;gen++;clear();seen.clear();retry=0;
     kickUid='';kickCh='';kickSub=[];
     if(!id){
-      status('kk','wait','looking up…');
+      status(k,'wait','looking up…');
       try{const j=await kickChannel(slug,rl);id=j.chatroom.id;kickSub=(j.subscriber_badges||[]).filter(b=>b&&b.badge_image&&b.badge_image.src).sort((a,b)=>a.months-b.months);kickUid=String(j.user_id||(j.user&&j.user.id)||'');kickCh=String(j.id||'')}catch{}
-      if(!id){stop=true;status('kk','err','add the chatroom ID');return false}
+      if(!id){stop=true;status(k,'err',k==='kk'?'add the chatroom ID':'lookup blocked');return false}
     }
-    CHAN.kk=slug||'chatroom-'+id;
+    CHAN[k]=slug||'chatroom-'+id;
     return open()},
-    stop(){stop=true;gen++;clear();status('kk','','off')}};
+    stop(){stop=true;gen++;clear();status(k,'','off')}};
 }
 
 /* ---- YouTube (Data API, your key) ---- */
@@ -428,6 +427,25 @@ function aterStart(){
 on('whisper',d=>{if(ME&&nm(d.from)===nm(ME))return;INBOX.push({id:d.ts+'-w',p:'at',name:d.from,text:d.text,ts:d.ts,r:false,w:true});ibSave();toast('Whisper from '+d.from,d.text);ping()});
 
 const CONNS={tw:Twitch(),kk:Kick(),yt:YouTube()};
+
+/* ---- guest chat: the chat of whatever other streamer you're watching, kept apart from Ater chat ---- */
+const GX={guest:true,gch:'',gp:''};
+const GUEST={p:'',u:'',conns:{twitch:Twitch('gtw',GX),kick:Kick('gkk',GX)}};
+const guestKey=()=>GUEST.p?GUEST.p+':'+GUEST.u:'';
+async function guestStart(p,u){
+  guestStop(true);
+  if(!GUEST.conns[p])return false;
+  GUEST.p=p;GUEST.u=String(u).toLowerCase();GX.gch=GUEST.u;GX.gp=p;
+  emit('guest',{on:true});
+  const ok=await GUEST.conns[p].start(p==='kick'?{ch:GUEST.u,relay:FIELDS.kkrl}:{ch:GUEST.u});
+  if(!ok){emit('guest',{on:false,failed:true,p,u:GUEST.u});GUEST.p='';GUEST.u=''}
+  return ok;
+}
+function guestStop(quiet){
+  if(!GUEST.p)return;
+  GUEST.conns[GUEST.p].stop();const was={p:GUEST.p,u:GUEST.u};GUEST.p='';GUEST.u='';
+  if(!quiet)emit('guest',{on:false,was});
+}
 /* saved connection fields */
 const FIELDS=LS.get('fields',{tw:CONFIG.channels.twitch||'',kk:CONFIG.channels.kick||'',kkid:'',kkrl:CONFIG.kickRelay||'',yt:'',ytk:''});
 const saveFields=()=>LS.set('fields',FIELDS);
@@ -546,4 +564,4 @@ function ibAdd(m){
   toast('@ '+m.name,m.text);ping();
 }
 
-on('msg',m=>{histAdd(m);if(m.hist)return;pulseAdd(m);linkAdd(m);lbAdd(m);ibAdd(m)});
+on('msg',m=>{histAdd(m);if(m.hist||m.guest)return;pulseAdd(m);linkAdd(m);lbAdd(m);ibAdd(m)});

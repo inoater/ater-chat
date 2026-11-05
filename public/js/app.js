@@ -22,7 +22,7 @@ function route(){
   $('#top').classList.remove('open');
   const q=new URLSearchParams(hs.split('?')[1]||'');
   if(q.get('s')){embFromParam(q.get('s'));history.replaceState(null,'','#/bigscreen')}
-  renderStage();heroSync();syncFab();
+  renderStage();heroSync();syncFab();emit('stage');
   if(v!=='home'){requestAnimationFrame(()=>{if(stick)scr.scrollTop=scr.scrollHeight})}
   if(v==='home'&&was&&was!=='home')scrollTo(0,0);
   document.title=v==='home'?'Ater Live · '+CONFIG.name:v==='big'?'Big Screen · Ater Live':'Chat · Ater Live';
@@ -102,6 +102,7 @@ function renderMsg(m,o={}){
   if(m.rp){const r=h('div','rp');r.title=m.rp.n+': '+m.rp.t;if(m.rp.id)r.dataset.to=m.rp.id;r.append(icon('e-reply'));r.append(h('b',null,'@'+m.rp.n),' '+m.rp.t);d.append(r)}
   if(o.ts!==false)d.append(h('span','ts',clock(m.ts)));
   if(m.p==='at')d.append(aterBadgeEl());else d.append(tagEl(m.p));
+  if(m.guest){d.classList.add('guest');d.dataset.g='1';const g=h('span','gtag',m.gch);g.title='Guest chat: '+m.gch+' on '+PN[m.p];d.insertBefore(g,d.querySelector('.tag'))}
   let body=d;const n=nameEl(m);
   if(m.ev){
     d.classList.add('ev',m.p);
@@ -147,7 +148,7 @@ function flush(){
   const w=$('#welcome');if(w)w.remove();
   const list=pend.slice(-200),fr=document.createDocumentFragment();pend=[];
   for(const m of list){
-    const e=SET.combos&&!m.hist&&soloEmote(m),prev=fr.lastChild||feed.lastElementChild;
+    const e=SET.combos&&!m.hist&&!m.guest&&soloEmote(m),prev=fr.lastChild||feed.lastElementChild;
     if(e&&prev&&prev.dataset.emo===e.name){comboBump(prev,m,e);continue}
     const el=renderMsg(m);if(e){el.dataset.emo=e.name;el._who=[m.name]}
     if(OV)ovFade(el);fr.append(el);
@@ -222,7 +223,7 @@ function welcome(){
 
 /* ---- home mini feed ---- */
 const mini=$('#miniFeed');
-on('msg',m=>{if(m.bot)return;$('#miniEmpty').hidden=true;mini.append(renderMsg(m,{ts:false}));while(mini.children.length>19)mini.children[1].remove()});
+on('msg',m=>{if(m.bot||m.guest)return;$('#miniEmpty').hidden=true;mini.append(renderMsg(m,{ts:false}));while(mini.children.length>19)mini.children[1].remove()});
 
 /* =====================================================================
    PANES: links · leaderboard · mentions · search · settings · user card
@@ -408,6 +409,10 @@ function renderSet(){
   src('kk','Kick chatters',FIELDS.kk?FIELDS.kk+(relayBase(FIELDS.kkrl)?'':' · needs a relay'):'Pick a channel first',ACTIVE.kk,v=>setPlatform('kk',v));
   src('yt','YouTube chatters',FIELDS.yt&&FIELDS.ytk?'Live chat via your API key':'Needs a live URL and API key',ACTIVE.yt,v=>setPlatform('yt',v));
   {const r=h('div','xr');r.style.marginTop='6px';const b=h('button','btn btn-o btn-sm','Change channels…');b.onclick=()=>setSheet(true);r.append(b);x.append(r)}
+  x=sec('Guest chat');
+  x.append(h('p','hint','When the Big Screen shows someone else’s Twitch or Kick stream, their chat can join yours: dimmed, marked with their name, and kept out of your leaderboard, links and mentions.'));
+  sw(x,'Ask me when I watch another stream','guestAsk');sw(x,'Show it automatically','guestAuto');
+  if(LS.get('gdis',[]).length){const b=h('button','btn btn-o btn-sm','Ask again for streams I said “Not now” to');b.onclick=()=>{LS.del('gdis');syncGuest();toast('Done','You’ll be asked again.')};x.append(b)}
   x=sec('Chat display');
   sw(x,'Badges (Ater, mod, sub…)','badges');sw(x,'Platform logos','logos');sw(x,'Emote combos','combos');sw(x,'Timestamps','ts');sw(x,'7TV emotes','sv');sw(x,'Hide bots and !commands','nobots');
   const fl=h('label','sw-row');const fv=h('span',null,'Text size · '+SET.fs+'px');const fr=h('input');fr.type='range';fr.min=10;fr.max=32;fr.value=SET.fs;fr.style.maxWidth='150px';fr.oninput=()=>{SET.fs=+fr.value;fv.textContent='Text size · '+SET.fs+'px';saveSet()};fl.append(fv,fr);x.append(fl);
@@ -593,8 +598,8 @@ const stageEmbed=()=>(following()&&(ownLive()||atPick()))||curEmbed();
 const isOwn=e=>!!e&&String(CONFIG.channels[e.p]||'').toLowerCase()===String(e.u).toLowerCase();
 function follow(on){EMB.follow=on;saveEmb();renderStage();heroSync();emit('stage')}
 function addEmbed(e,main){if(!EMB.list.some(x=>ekey(x)===ekey(e)))EMB.list.push(e);if(main||!EMB.main)EMB.main=ekey(e);if(main)EMB.follow=false;saveEmb();renderStage();heroSync();emit('stage')}
-function removeEmbed(e){const k=ekey(e),n=EMB.list.length;EMB.list=EMB.list.filter(x=>ekey(x)!==k);if(EMB.main===k)EMB.main=EMB.list[0]?ekey(EMB.list[0]):'';saveEmb();renderStage();return EMB.list.length<n}
-function embFromParam(s){const l=s.split(',').map(x=>parseStream(x.replace(':',' '))).filter(Boolean);if(l.length){EMB.list=l;EMB.main=ekey(l[0]);saveEmb()}}
+function removeEmbed(e){const k=ekey(e),n=EMB.list.length;EMB.list=EMB.list.filter(x=>ekey(x)!==k);if(EMB.main===k)EMB.main=EMB.list[0]?ekey(EMB.list[0]):'';saveEmb();renderStage();emit('stage');return EMB.list.length<n}
+function embFromParam(s){const l=s.split(',').map(x=>parseStream(x.replace(':',' '))).filter(Boolean);if(l.length){EMB.list=l;EMB.main=ekey(l[0]);EMB.follow=false;saveEmb()}}
 const layoutUrl=()=>{const c=curEmbed(),l=[c,...EMB.list.filter(e=>e!==c)].filter(Boolean);return baseUrl()+'#/bigscreen?s='+l.map(e=>e.p+':'+e.u).join(',')};
 function frameFor(e,muted){
   if(e.p==='twitch'&&!location.hostname){
@@ -713,7 +718,7 @@ async function checkLive(){
 }
 const liveFor=e=>e&&e.u===String(CONFIG.channels[e.p]||'').toLowerCase()?LIVE[e.p]:null;
 const liveAny=()=>{for(const p of['kick','twitch'])if(LIVE[p]&&LIVE[p].live)return p;return''};
-on('live',()=>{heroSync();renderStage();$('#navLive').hidden=!liveAny();document.body.classList.toggle('is-live',!!liveAny())});
+on('live',()=>{heroSync();renderStage();emit('stage');$('#navLive').hidden=!liveAny();document.body.classList.toggle('is-live',!!liveAny())});
 
 /* =====================================================================
    HOME
@@ -1108,6 +1113,52 @@ async function renderMod(){
   }
 }
 on('modlog',e=>{if(PANE==='mod'&&MODK==='log'){const L=$('#modL');const em=L.querySelector('.empty');if(em)em.remove();L.prepend(logRow(e))}});
+
+/* ---- guest chat: offer the chat of the stream you're watching, kept visibly apart ---- */
+const GCHAT={twitch:1,kick:1};
+let gFilter='all';
+function guestCandidate(){
+  const e=VIEW()==='home'?null:stageEmbed();
+  if(!e||!GCHAT[e.p]||isOwn(e))return null;
+  if(e.p==='twitch'&&ACTIVE.tw&&CHAN.tw===e.u)return null; /* already reading it as a platform chat */
+  if(e.p==='kick'&&ACTIVE.kk&&CHAN.kk===e.u)return null;
+  return e;
+}
+function syncGuest(){
+  const e=guestCandidate(),ask=$('#gAsk'),bar=$('#gBar');
+  /* leaving that stream ends its guest chat */
+  if(GUEST.p&&(!e||e.p!==GUEST.p||e.u!==GUEST.u)){const was=GUEST.u;guestStop(true);sys('Stopped showing <b>'+escH(was)+'</b>’s chat.','sys');}
+  const dismissed=LS.get('gdis',[]);
+  const k=e&&ekey(e);
+  if(e&&!GUEST.p&&SET.guestAuto&&!dismissed.includes(k)){guestStart(e.p,e.u);return}
+  ask.hidden=!(e&&!GUEST.p&&SET.guestAsk!==false&&!dismissed.includes(k));
+  if(!ask.hidden){
+    ask.replaceChildren();const pm=h('span','pm '+PLAT[e.p].c);pm.append(icon(PLAT[e.p].i));
+    const t=h('div','gt');t.append(h('b',null,'Watching '+e.u+(e.pick?' (Ater pick)':'')),h('span',null,'Show '+e.u+'’s '+PLAT[e.p].l+' chat in here too? It’ll be dimmed and marked so Ater chat stays easy to spot.'));
+    const yes=h('button','btn btn-p btn-sm','Show their chat');yes.onclick=()=>guestStart(e.p,e.u);
+    const no=h('button','btn btn-sm','Not now');no.onclick=()=>{LS.set('gdis',[...dismissed,k].slice(-30));syncGuest()};
+    const al=h('button','linkb','Always');al.title='Show the chat of any stream you watch, without asking';al.onclick=()=>{SET.guestAuto=true;saveSet();guestStart(e.p,e.u)};
+    const a=h('div','ga');a.append(yes,no,al);ask.append(pm,t,a);
+  }
+  bar.hidden=!GUEST.p;
+  if(GUEST.p){
+    bar.replaceChildren();
+    const st=STATUS[GUEST.p==='kick'?'gkk':'gtw'];
+    const seg=h('div','seg');
+    for(const[v,l]of[['all','Everyone'],['ater','Ater only'],['guest',GUEST.u]]){const b=h('button',gFilter===v?'on':'',l);b.onclick=()=>{gFilter=v;feed.dataset.f=v;syncGuest();if(stick)scr.scrollTop=scr.scrollHeight};seg.append(b)}
+    const dot=h('span','gst '+(st.c||''));dot.title=PN[GUEST.p==='kick'?'kk':'tw']+' · '+st.t;
+    const x=h('button','ic');x.title='Stop showing '+GUEST.u+'’s chat';x.setAttribute('aria-label',x.title);x.append(icon('i-x'));
+    x.onclick=()=>{const k2=GUEST.p+':'+GUEST.u;guestStop();LS.set('gdis',[...LS.get('gdis',[]),k2].slice(-30));gFilter='all';feed.dataset.f='all';syncGuest()};
+    bar.append(h('span','gl','Guest chat'),dot,seg,h('span','sp'),x);
+  }else{gFilter='all';feed.dataset.f='all'}
+}
+on('stage',syncGuest);on('active',syncGuest);on('set',syncGuest);
+on('guest',g=>{
+  if(g.on)sys('Showing <b>'+escH(GUEST.u)+'</b>’s chat as a guest. It’s dimmed with a <span class="gtag">'+escH(GUEST.u)+'</span> marker. Ater chat stays bright.','sys');
+  else if(g.failed)sys('Couldn’t open <b>'+escH(g.u)+'</b>’s chat'+(g.p==='kick'?' (Kick channel lookups need a relay that forwards them; see kick-relay/).':'.'),'sys');
+  syncGuest();
+});
+on('status',s=>{if(s.p==='gtw'||s.p==='gkk')syncGuest()});
 
 on('featured',({now,was})=>{
   renderStage();heroSync();emit('stage');
