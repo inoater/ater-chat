@@ -1,14 +1,15 @@
 /* =====================================================================
    ATER LIVE — CONFIG
    Everything about the streamer lives here. Change it and reload.
+   The events, videos, merch and about text below are examples: replace them.
    ===================================================================== */
 const CONFIG={
   name:'Inoater',
-  /* channels used for the Big Screen default, live status and chat auto-connect */
+  /* your channels: the Big Screen default, live status, and the chats used when viewers switch on platform chatters */
   channels:{twitch:'inoater',kick:'inoater',youtube:''},
   /* your names in chat: mentioning any of these lands in Mentions */
   aliases:['inoater','ino'],
-  /* Ater chat server (ater-server.js). '' = the same address this page is served from */
+  /* Ater chat server address. Leave '': npm start serves the site and the chat together (the server has no CORS for other origins) */
   server:'',
   /* Twitch user ID whose 7TV emote set Ater chatters can use (optional, numbers only) */
   sevenTV:'',
